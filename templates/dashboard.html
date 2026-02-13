@@ -1,0 +1,1026 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voicebot Dashboard - ElevenLabs Analytics</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <style>
+        :root {
+            --bg: #0f1117;
+            --surface: #1a1d27;
+            --surface2: #232633;
+            --border: #2e3245;
+            --text: #e4e7f1;
+            --text-dim: #8b8fa3;
+            --accent: #6c5ce7;
+            --accent2: #a29bfe;
+            --green: #00b894;
+            --red: #e17055;
+            --yellow: #fdcb6e;
+            --blue: #74b9ff;
+            --orange: #e17055;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; }
+
+        .header {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            padding: 16px 32px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .header h1 { font-size: 20px; font-weight: 600; }
+        .header h1 span { color: var(--accent2); }
+
+        .container { max-width: 1600px; margin: 0 auto; padding: 24px; }
+
+        /* Settings Panel */
+        .settings-panel {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+        .settings-panel h2 { font-size: 16px; margin-bottom: 16px; color: var(--accent2); }
+        .settings-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr auto;
+            gap: 12px;
+            align-items: end;
+        }
+        .form-group { display: flex; flex-direction: column; gap: 6px; }
+        .form-group label { font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
+        .form-group input, .form-group select {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 10px 14px;
+            color: var(--text);
+            font-size: 14px;
+        }
+        .form-group input:focus, .form-group select:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        .btn-primary { background: var(--accent); color: #fff; }
+        .btn-primary:hover { background: var(--accent2); }
+        .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+        .btn-secondary:hover { background: var(--border); }
+        .btn-sm { padding: 6px 14px; font-size: 12px; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* Controls bar */
+        .controls {
+            display: flex;
+            gap: 12px;
+            align-items: end;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 24px;
+            background: var(--surface);
+            padding: 4px;
+            border-radius: 10px;
+            width: fit-content;
+        }
+        .tab {
+            padding: 8px 20px;
+            border: none;
+            background: transparent;
+            color: var(--text-dim);
+            cursor: pointer;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+        .tab.active { background: var(--accent); color: #fff; }
+        .tab:hover:not(.active) { color: var(--text); background: var(--surface2); }
+
+        /* KPI Cards */
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .kpi-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+        }
+        .kpi-card .kpi-label {
+            font-size: 12px;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+        .kpi-card .kpi-value {
+            font-size: 32px;
+            font-weight: 700;
+        }
+        .kpi-card .kpi-sub {
+            font-size: 12px;
+            color: var(--text-dim);
+            margin-top: 4px;
+        }
+        .kpi-green .kpi-value { color: var(--green); }
+        .kpi-red .kpi-value { color: var(--red); }
+        .kpi-blue .kpi-value { color: var(--blue); }
+        .kpi-yellow .kpi-value { color: var(--yellow); }
+        .kpi-accent .kpi-value { color: var(--accent2); }
+
+        /* Charts */
+        .charts-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .chart-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+        }
+        .chart-card h3 {
+            font-size: 14px;
+            color: var(--text-dim);
+            margin-bottom: 16px;
+        }
+        .chart-card canvas { max-height: 300px; }
+
+        /* Table */
+        .table-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            overflow-x: auto;
+        }
+        .table-card h3 { font-size: 14px; color: var(--text-dim); margin-bottom: 16px; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th {
+            text-align: left;
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--border);
+            color: var(--text-dim);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        td {
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--border);
+        }
+        tr:hover td { background: var(--surface2); }
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        .badge-success { background: rgba(0,184,148,0.15); color: var(--green); }
+        .badge-failure { background: rgba(225,112,85,0.15); color: var(--red); }
+        .badge-unknown { background: rgba(139,143,163,0.15); color: var(--text-dim); }
+
+        .pagination {
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+            margin-top: 16px;
+        }
+
+        /* Status indicator */
+        .status-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 6px;
+        }
+        .status-running { background: var(--yellow); animation: pulse 1s infinite; }
+        .status-ok { background: var(--green); }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+        .sync-status {
+            font-size: 13px;
+            padding: 8px 16px;
+            background: var(--surface2);
+            border-radius: 8px;
+            display: none;
+        }
+
+        /* Loading */
+        .spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .hidden { display: none !important; }
+
+        /* Criteria table */
+        .criteria-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 12px;
+        }
+        .criteria-item {
+            background: var(--surface2);
+            border-radius: 8px;
+            padding: 14px;
+        }
+        .criteria-item .name { font-size: 13px; font-weight: 500; margin-bottom: 8px; }
+        .criteria-bar {
+            height: 6px;
+            background: var(--border);
+            border-radius: 3px;
+            overflow: hidden;
+            margin-bottom: 6px;
+        }
+        .criteria-bar-fill { height: 100%; background: var(--green); border-radius: 3px; }
+        .criteria-stats { font-size: 11px; color: var(--text-dim); }
+
+        @media (max-width: 900px) {
+            .settings-grid { grid-template-columns: 1fr; }
+            .charts-grid { grid-template-columns: 1fr; }
+            .controls { flex-direction: column; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h1><span>Voicebot</span> Dashboard</h1>
+    <div style="display:flex; gap:12px; align-items:center;">
+        <span style="font-size:11px; color:var(--text-dim); margin-right:8px;">Autor: Robert Małek</span>
+        <span id="schedulerStatus" style="font-size:12px; color:var(--text-dim);">
+            <span class="status-dot status-ok"></span> Scheduler aktywny
+        </span>
+        <button class="btn btn-sm btn-secondary" onclick="toggleSettings()">Ustawienia</button>
+    </div>
+</div>
+
+<div class="container">
+
+    <!-- Settings Panel -->
+    <div class="settings-panel" id="settingsPanel" style="display: {{ 'block' if not configured else 'none' }};">
+        <h2>Konfiguracja API</h2>
+        <div class="settings-grid">
+            <div class="form-group">
+                <label>ElevenLabs API Key</label>
+                <input type="password" id="apiKeyInput" placeholder="xi-..." value="">
+            </div>
+            <div class="form-group">
+                <label>Agent ID</label>
+                <input type="text" id="agentIdInput" placeholder="np. abc123..." value="{{ agent_id }}">
+            </div>
+            <div class="form-group">
+                <label>&nbsp;</label>
+                <button class="btn btn-primary" onclick="saveSettings()">Zapisz</button>
+            </div>
+        </div>
+        <div id="settingsMsg" style="margin-top:12px; font-size:13px;"></div>
+    </div>
+
+    <!-- Controls -->
+    <div class="controls">
+        <div class="form-group">
+            <label>Okres od</label>
+            <input type="date" id="dateFrom">
+        </div>
+        <div class="form-group">
+            <label>Okres do</label>
+            <input type="date" id="dateTo">
+        </div>
+        <div class="form-group">
+            <label>Miesiąc</label>
+            <select id="monthSelect">
+                <option value="">Wszystkie</option>
+                {% for m in months %}
+                <option value="{{ m }}">{{ m }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label>&nbsp;</label>
+            <button class="btn btn-primary" onclick="triggerSync()">Pobierz dane</button>
+        </div>
+        <div class="form-group">
+            <label>&nbsp;</label>
+            <button class="btn btn-secondary" onclick="loadKPIs()">Odśwież KPI</button>
+        </div>
+        <div class="form-group">
+            <label>&nbsp;</label>
+            <button class="btn btn-secondary" onclick="switchTab('archives', document.querySelector('[data-tab=archives]'))">Archiwizuj CSV</button>
+        </div>
+        <div id="syncStatus" class="sync-status"></div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+        <button class="tab active" data-tab="dashboard" onclick="switchTab('dashboard', this)">Dashboard</button>
+        <button class="tab" data-tab="table" onclick="switchTab('table', this)">Tabela konwersacji</button>
+        <button class="tab" data-tab="criteria" onclick="switchTab('criteria', this)">Scoring / Kryteria</button>
+        <button class="tab" data-tab="logs" onclick="switchTab('logs', this)">Logi synchronizacji</button>
+        <button class="tab" data-tab="archives" onclick="switchTab('archives', this)">Archiwa CSV</button>
+    </div>
+
+    <!-- Dashboard Tab -->
+    <div id="tab-dashboard">
+        <div class="kpi-grid" id="kpiGrid">
+            <div class="kpi-card"><div class="kpi-label">Ładowanie...</div><div class="kpi-value">-</div></div>
+        </div>
+
+        <div class="charts-grid">
+            <div class="chart-card">
+                <h3>Skuteczność konwersji</h3>
+                <canvas id="chartConversion"></canvas>
+            </div>
+            <div class="chart-card">
+                <h3>Połączenia wg kierunku</h3>
+                <canvas id="chartDirection"></canvas>
+            </div>
+            <div class="chart-card">
+                <h3>Trend dzienny - liczba rozmów</h3>
+                <canvas id="chartDailyTotal"></canvas>
+            </div>
+            <div class="chart-card">
+                <h3>Trend dzienny - średni czas (s)</h3>
+                <canvas id="chartDailyDuration"></canvas>
+            </div>
+            <div class="chart-card">
+                <h3>Trend dzienny - sukces vs porażka</h3>
+                <canvas id="chartDailySuccess"></canvas>
+            </div>
+            <div class="chart-card">
+                <h3>Trend dzienny - koszt</h3>
+                <canvas id="chartDailyCost"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Table Tab -->
+    <div id="tab-table" class="hidden">
+        <div class="table-card">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                <h3 style="margin-bottom:0;">Konwersacje</h3>
+                <div style="display:flex; gap:8px; align-items:center;">
+                    <button class="btn btn-sm btn-secondary" onclick="refetchPhones()" title="Ponownie pobierz szczegóły dla konwersacji bez numerów telefonów">
+                        Pobierz numery tel.
+                    </button>
+                    <button class="btn btn-sm btn-secondary" onclick="exportCSV()" title="Eksportuj widoczne dane do CSV">
+                        Eksportuj CSV
+                    </button>
+                    <span id="refetchMsg" style="font-size:12px;"></span>
+                </div>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Data</th>
+                        <th>ID</th>
+                        <th>Status</th>
+                        <th>Wynik</th>
+                        <th>Kierunek</th>
+                        <th>Nr Voicebota</th>
+                        <th>Nr Klienta</th>
+                        <th>Czas (s)</th>
+                        <th>Wiadomości</th>
+                        <th>Ocena</th>
+                        <th>Koszt</th>
+                        <th>Zakończenie</th>
+                        <th>Podsumowanie</th>
+                    </tr>
+                </thead>
+                <tbody id="conversationsBody"></tbody>
+            </table>
+            <div class="pagination" id="pagination"></div>
+        </div>
+    </div>
+
+    <!-- Criteria Tab -->
+    <div id="tab-criteria" class="hidden">
+        <div class="table-card">
+            <h3>Wyniki kryteriów oceny (Scoring)</h3>
+            <div class="criteria-grid" id="criteriaGrid">
+                <p style="color:var(--text-dim)">Brak danych. Pobierz konwersacje aby zobaczyć kryteria.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Logs Tab -->
+    <div id="tab-logs" class="hidden">
+        <div class="table-card">
+            <h3>Historia synchronizacji</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Agent</th>
+                        <th>Typ</th>
+                        <th>Rozpoczęto</th>
+                        <th>Zakończono</th>
+                        <th>Pobrano</th>
+                        <th>Szczegóły</th>
+                        <th>Status</th>
+                        <th>Błąd</th>
+                    </tr>
+                </thead>
+                <tbody id="syncLogsBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Archives Tab -->
+    <div id="tab-archives" class="hidden">
+        <div class="table-card" style="margin-bottom:16px;">
+            <h3>Utwórz nowe archiwum CSV</h3>
+            <div style="display:flex; gap:12px; align-items:end; margin-top:12px;">
+                <div class="form-group">
+                    <label>Miesiąc do archiwizacji</label>
+                    <select id="archiveMonthSelect">
+                        <option value="">-- wybierz miesiąc --</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>&nbsp;</label>
+                    <button class="btn btn-primary" onclick="archiveSelectedMonth()">Archiwizuj wybrany miesiąc</button>
+                </div>
+                <div id="archiveMsg" style="font-size:13px; padding:10px;"></div>
+            </div>
+        </div>
+        <div class="table-card">
+            <h3>Istniejące archiwa CSV</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Miesiąc</th>
+                        <th>Agent</th>
+                        <th>Rekordów</th>
+                        <th>Data archiwizacji</th>
+                        <th>Akcja</th>
+                    </tr>
+                </thead>
+                <tbody id="archivesBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+
+<script>
+// ─── State ──────────────────────────────────────────
+let currentKPIs = null;
+let charts = {};
+let currentPage = 1;
+
+// ─── Settings ───────────────────────────────────────
+function toggleSettings() {
+    const panel = document.getElementById('settingsPanel');
+    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+}
+
+async function saveSettings() {
+    const apiKey = document.getElementById('apiKeyInput').value.trim();
+    const agentId = document.getElementById('agentIdInput').value.trim();
+    if (!apiKey || !agentId) {
+        showMsg('settingsMsg', 'Podaj API Key i Agent ID', 'var(--red)');
+        return;
+    }
+    const resp = await fetch('/api/settings', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({api_key: apiKey, agent_id: agentId}),
+    });
+    if (resp.ok) {
+        showMsg('settingsMsg', 'Zapisano!', 'var(--green)');
+        setTimeout(() => location.reload(), 1000);
+    } else {
+        showMsg('settingsMsg', 'Błąd zapisu', 'var(--red)');
+    }
+}
+
+function showMsg(id, text, color) {
+    const el = document.getElementById(id);
+    el.textContent = text;
+    el.style.color = color;
+}
+
+// ─── Tabs ───────────────────────────────────────────
+function switchTab(name, btn) {
+    document.querySelectorAll('[id^="tab-"]').forEach(el => el.classList.add('hidden'));
+    document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+    document.getElementById('tab-' + name).classList.remove('hidden');
+    btn.classList.add('active');
+
+    if (name === 'table') loadConversations();
+    if (name === 'logs') loadSyncLogs();
+    if (name === 'archives') loadArchives();
+}
+
+// ─── Sync ───────────────────────────────────────────
+async function triggerSync() {
+    const status = document.getElementById('syncStatus');
+    status.style.display = 'block';
+    status.innerHTML = '<span class="spinner"></span> Synchronizacja w toku...';
+
+    const body = {};
+    const df = document.getElementById('dateFrom').value;
+    const dt = document.getElementById('dateTo').value;
+    if (df) body.start_date = df;
+    if (dt) body.end_date = dt;
+
+    try {
+        const resp = await fetch('/api/sync', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(body),
+        });
+        const data = await resp.json();
+        status.innerHTML = '<span class="status-dot status-ok"></span> ' + (data.message || 'Synchronizacja uruchomiona');
+
+        // Poll for completion
+        setTimeout(async () => {
+            await loadKPIs();
+            await refreshMonths();
+            status.innerHTML = '<span class="status-dot status-ok"></span> Dane załadowane. Odśwież KPI.';
+        }, 5000);
+    } catch (e) {
+        status.innerHTML = '<span style="color:var(--red)">Błąd: ' + e.message + '</span>';
+    }
+}
+
+// ─── KPIs ───────────────────────────────────────────
+async function loadKPIs() {
+    const month = document.getElementById('monthSelect').value;
+    const params = new URLSearchParams();
+    if (month) params.set('month', month);
+
+    try {
+        const resp = await fetch('/api/kpis?' + params.toString());
+        if (!resp.ok) return;
+        currentKPIs = await resp.json();
+        renderKPIs(currentKPIs);
+        renderCharts(currentKPIs);
+        renderCriteria(currentKPIs.criteria_stats);
+    } catch (e) {
+        console.error('KPI load error:', e);
+    }
+}
+
+function renderKPIs(k) {
+    const grid = document.getElementById('kpiGrid');
+    grid.innerHTML = `
+        <div class="kpi-card kpi-accent">
+            <div class="kpi-label">Wszystkie rozmowy</div>
+            <div class="kpi-value">${k.total_conversations}</div>
+            <div class="kpi-sub">${k.month}</div>
+        </div>
+        <div class="kpi-card kpi-green">
+            <div class="kpi-label">Skuteczność konwersji</div>
+            <div class="kpi-value">${k.conversion_rate}%</div>
+            <div class="kpi-sub">${k.successful_count} sukces / ${k.failed_count} porażka / ${k.unknown_count} brak danych</div>
+        </div>
+        <div class="kpi-card kpi-blue">
+            <div class="kpi-label">Połączenie udane</div>
+            <div class="kpi-value">${k.connection_rate}%</div>
+            <div class="kpi-sub">${k.done_calls} ukończone / ${k.failed_calls} nieudane</div>
+        </div>
+        <div class="kpi-card kpi-yellow">
+            <div class="kpi-label">Śr. czas rozmowy</div>
+            <div class="kpi-value">${formatDuration(k.avg_duration_secs)}</div>
+            <div class="kpi-sub">min ${k.min_duration_secs}s / max ${k.max_duration_secs}s</div>
+        </div>
+        <div class="kpi-card kpi-red">
+            <div class="kpi-label">Transfery do agenta</div>
+            <div class="kpi-value">${k.transfer_count}</div>
+            <div class="kpi-sub">${k.transfer_rate}% sesji</div>
+        </div>
+        <div class="kpi-card kpi-red">
+            <div class="kpi-label">Dropout / Porzucenia</div>
+            <div class="kpi-value">${k.dropout_rate}%</div>
+            <div class="kpi-sub">${k.dropout_count} porzuconych</div>
+        </div>
+        <div class="kpi-card kpi-blue">
+            <div class="kpi-label">Śr. wiadomości bota</div>
+            <div class="kpi-value">${k.avg_message_count}</div>
+            <div class="kpi-sub">na sesję</div>
+        </div>
+        <div class="kpi-card kpi-yellow">
+            <div class="kpi-label">Koszt sesji (śr.)</div>
+            <div class="kpi-value">${k.avg_cost_per_session}</div>
+            <div class="kpi-sub">suma: ${k.total_cost}</div>
+        </div>
+        <div class="kpi-card kpi-red">
+            <div class="kpi-label">Błędy techniczne</div>
+            <div class="kpi-value">${k.technical_errors}</div>
+            <div class="kpi-sub">${k.error_rate}% sesji</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-label">Kierunek</div>
+            <div class="kpi-value" style="font-size:18px">${k.inbound_calls} przych. / ${k.outbound_calls} wych.</div>
+        </div>
+        <div class="kpi-card kpi-green">
+            <div class="kpi-label">Śr. ocena</div>
+            <div class="kpi-value">${k.avg_rating || '-'}</div>
+            <div class="kpi-sub">skala 1-5</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-label">Krótkie (&lt;30s) / Długie (&gt;5min)</div>
+            <div class="kpi-value" style="font-size:22px">${k.short_calls_under_30s} / ${k.long_calls_over_300s}</div>
+        </div>
+    `;
+}
+
+function formatDuration(secs) {
+    if (!secs) return '0s';
+    const m = Math.floor(secs / 60);
+    const s = Math.round(secs % 60);
+    return m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
+
+// ─── Charts ─────────────────────────────────────────
+function destroyCharts() {
+    Object.values(charts).forEach(c => c.destroy());
+    charts = {};
+}
+
+function renderCharts(k) {
+    destroyCharts();
+    const chartOpts = {
+        responsive: true,
+        plugins: { legend: { labels: { color: '#8b8fa3', font: { size: 11 } } } },
+        scales: {
+            x: { ticks: { color: '#8b8fa3', font: { size: 10 } }, grid: { color: '#2e3245' } },
+            y: { ticks: { color: '#8b8fa3' }, grid: { color: '#2e3245' } },
+        },
+    };
+
+    // Conversion pie
+    charts.conversion = new Chart(document.getElementById('chartConversion'), {
+        type: 'doughnut',
+        data: {
+            labels: ['Sukces', 'Porażka', 'Brak danych'],
+            datasets: [{
+                data: [k.successful_count, k.failed_count, k.unknown_count],
+                backgroundColor: ['#00b894', '#e17055', '#636e72'],
+                borderWidth: 0,
+            }],
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { position: 'bottom', labels: { color: '#8b8fa3', padding: 16 } },
+            },
+        },
+    });
+
+    // Direction pie
+    charts.direction = new Chart(document.getElementById('chartDirection'), {
+        type: 'doughnut',
+        data: {
+            labels: ['Przychodzące', 'Wychodzące'],
+            datasets: [{
+                data: [k.inbound_calls, k.outbound_calls],
+                backgroundColor: ['#74b9ff', '#a29bfe'],
+                borderWidth: 0,
+            }],
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { position: 'bottom', labels: { color: '#8b8fa3', padding: 16 } } },
+        },
+    });
+
+    const trends = k.daily_trends || [];
+    const labels = trends.map(t => t.date);
+
+    // Daily total
+    charts.dailyTotal = new Chart(document.getElementById('chartDailyTotal'), {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [{ label: 'Rozmowy', data: trends.map(t => t.total), backgroundColor: '#6c5ce7' }],
+        },
+        options: chartOpts,
+    });
+
+    // Daily duration
+    charts.dailyDuration = new Chart(document.getElementById('chartDailyDuration'), {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [{
+                label: 'Śr. czas (s)',
+                data: trends.map(t => t.avg_duration),
+                borderColor: '#fdcb6e',
+                backgroundColor: 'rgba(253,203,110,0.1)',
+                fill: true,
+                tension: 0.3,
+            }],
+        },
+        options: chartOpts,
+    });
+
+    // Daily success/fail
+    charts.dailySuccess = new Chart(document.getElementById('chartDailySuccess'), {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [
+                { label: 'Sukces', data: trends.map(t => t.success), backgroundColor: '#00b894' },
+                { label: 'Porażka', data: trends.map(t => t.failed), backgroundColor: '#e17055' },
+            ],
+        },
+        options: { ...chartOpts, scales: { ...chartOpts.scales, x: { ...chartOpts.scales.x, stacked: true }, y: { ...chartOpts.scales.y, stacked: true } } },
+    });
+
+    // Daily cost
+    charts.dailyCost = new Chart(document.getElementById('chartDailyCost'), {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [{
+                label: 'Koszt',
+                data: trends.map(t => t.cost),
+                borderColor: '#e17055',
+                backgroundColor: 'rgba(225,112,85,0.1)',
+                fill: true,
+                tension: 0.3,
+            }],
+        },
+        options: chartOpts,
+    });
+}
+
+// ─── Criteria ───────────────────────────────────────
+function renderCriteria(stats) {
+    const grid = document.getElementById('criteriaGrid');
+    if (!stats || stats.length === 0) {
+        grid.innerHTML = '<p style="color:var(--text-dim)">Brak danych o kryteriach oceny.</p>';
+        return;
+    }
+    grid.innerHTML = stats.map(c => {
+        const pct = c.total > 0 ? Math.round(c.pass / c.total * 100) : 0;
+        return `
+            <div class="criteria-item">
+                <div class="name">${c.name}</div>
+                <div class="criteria-bar"><div class="criteria-bar-fill" style="width:${pct}%"></div></div>
+                <div class="criteria-stats">${pct}% pass (${c.pass}/${c.total})</div>
+            </div>
+        `;
+    }).join('');
+}
+
+// ─── Conversations Table ────────────────────────────
+async function loadConversations(page = 1) {
+    currentPage = page;
+    const month = document.getElementById('monthSelect').value;
+    const params = new URLSearchParams({ page, per_page: 50 });
+    if (month) params.set('month', month);
+
+    try {
+        const resp = await fetch('/api/conversations?' + params.toString());
+        if (!resp.ok) return;
+        const data = await resp.json();
+        renderConversations(data);
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+function renderConversations(data) {
+    const body = document.getElementById('conversationsBody');
+    body.innerHTML = data.conversations.map(c => `
+        <tr>
+            <td>${c.start_time ? new Date(c.start_time).toLocaleString('pl-PL') : '-'}</td>
+            <td style="font-size:11px; font-family:monospace;">${(c.conversation_id || '').substring(0, 12)}...</td>
+            <td>${c.status}</td>
+            <td><span class="badge badge-${c.call_successful}">${c.call_successful || '-'}</span></td>
+            <td>${c.direction || '-'}</td>
+            <td style="font-family:monospace; font-size:12px; white-space:nowrap;">${c.agent_phone || '-'}</td>
+            <td style="font-family:monospace; font-size:12px; white-space:nowrap;">${c.client_phone || '-'}</td>
+            <td>${c.duration_secs || 0}</td>
+            <td>${c.message_count || 0}</td>
+            <td>${c.rating || '-'}</td>
+            <td>${c.cost || 0}</td>
+            <td>${c.termination_reason || '-'}</td>
+            <td style="max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"
+                title="${(c.transcript_summary || '').replace(/"/g, '&quot;')}">${c.transcript_summary || '-'}</td>
+        </tr>
+    `).join('');
+
+    // Pagination
+    const totalPages = Math.ceil(data.total / data.per_page);
+    const pag = document.getElementById('pagination');
+    let html = '';
+    for (let i = 1; i <= Math.min(totalPages, 10); i++) {
+        html += `<button class="btn btn-sm ${i === data.page ? 'btn-primary' : 'btn-secondary'}"
+                         onclick="loadConversations(${i})">${i}</button>`;
+    }
+    if (totalPages > 10) html += `<span style="color:var(--text-dim)">...${totalPages}</span>`;
+    pag.innerHTML = html;
+}
+
+// ─── Sync Logs ──────────────────────────────────────
+async function loadSyncLogs() {
+    try {
+        const resp = await fetch('/api/sync-logs');
+        const logs = await resp.json();
+        const body = document.getElementById('syncLogsBody');
+        body.innerHTML = logs.map(l => `
+            <tr>
+                <td>${l.id}</td>
+                <td style="font-family:monospace;font-size:11px;">${(l.agent_id || '').substring(0, 12)}</td>
+                <td>${l.sync_type}</td>
+                <td>${l.started_at ? new Date(l.started_at).toLocaleString('pl-PL') : '-'}</td>
+                <td>${l.finished_at ? new Date(l.finished_at).toLocaleString('pl-PL') : '-'}</td>
+                <td>${l.conversations_fetched}</td>
+                <td>${l.details_fetched}</td>
+                <td><span class="badge badge-${l.status === 'completed' ? 'success' : l.status === 'failed' ? 'failure' : 'unknown'}">${l.status}</span></td>
+                <td style="max-width:200px; overflow:hidden; text-overflow:ellipsis;">${l.error_message || '-'}</td>
+            </tr>
+        `).join('');
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+// ─── Archives ───────────────────────────────────────
+async function loadArchives() {
+    // Load archive month selector
+    await loadArchiveMonths();
+    // Load existing archives list
+    try {
+        const resp = await fetch('/api/archives');
+        const archives = await resp.json();
+        const body = document.getElementById('archivesBody');
+        if (archives.length === 0) {
+            body.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--text-dim); padding:24px;">Brak archiwów. Wybierz miesiąc powyżej i kliknij "Archiwizuj".</td></tr>';
+        } else {
+            body.innerHTML = archives.map(a => `
+                <tr>
+                    <td>${a.id}</td>
+                    <td>${a.month}</td>
+                    <td style="font-family:monospace;font-size:11px;">${(a.agent_id || '').substring(0, 12)}</td>
+                    <td>${a.records_count}</td>
+                    <td>${a.archived_at ? new Date(a.archived_at).toLocaleString('pl-PL') : '-'}</td>
+                    <td><a href="/api/download-csv/${a.id}" class="btn btn-sm btn-secondary" target="_blank">Pobierz CSV</a></td>
+                </tr>
+            `).join('');
+        }
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+async function loadArchiveMonths() {
+    try {
+        const resp = await fetch('/api/months');
+        const data = await resp.json();
+        const sel = document.getElementById('archiveMonthSelect');
+        sel.innerHTML = '<option value="">-- wybierz miesiąc --</option>';
+        (data.months || []).forEach(m => {
+            sel.innerHTML += `<option value="${m}">${m}</option>`;
+        });
+    } catch (e) {}
+}
+
+async function archiveSelectedMonth() {
+    const month = document.getElementById('archiveMonthSelect').value;
+    const msgEl = document.getElementById('archiveMsg');
+    if (!month) {
+        msgEl.textContent = 'Wybierz miesiąc z listy!';
+        msgEl.style.color = 'var(--red)';
+        return;
+    }
+    msgEl.innerHTML = '<span class="spinner"></span> Archiwizuję...';
+    msgEl.style.color = 'var(--text)';
+    try {
+        const resp = await fetch('/api/archive?month=' + month, { method: 'POST' });
+        const data = await resp.json();
+        if (resp.ok) {
+            msgEl.textContent = 'Zarchiwizowano miesiąc ' + month + '.';
+            msgEl.style.color = 'var(--green)';
+            await loadArchives(); // reload table
+        } else {
+            msgEl.textContent = 'Błąd: ' + (data.detail || 'nieznany');
+            msgEl.style.color = 'var(--red)';
+        }
+    } catch (e) {
+        msgEl.textContent = 'Błąd: ' + e.message;
+        msgEl.style.color = 'var(--red)';
+    }
+}
+
+// Keep old function for backwards compat with top bar button
+async function archiveMonth() {
+    const month = document.getElementById('monthSelect').value;
+    if (!month) {
+        // Switch to archives tab instead
+        const archBtn = document.querySelector('[data-tab="archives"]');
+        switchTab('archives', archBtn);
+        return;
+    }
+    try {
+        const resp = await fetch('/api/archive?month=' + month, { method: 'POST' });
+        const data = await resp.json();
+        if (resp.ok) {
+            alert('Zarchiwizowano miesiąc ' + month);
+        } else {
+            alert('Błąd: ' + (data.detail || 'nieznany'));
+        }
+    } catch (e) {
+        alert('Błąd: ' + e.message);
+    }
+}
+
+async function refreshMonths() {
+    try {
+        const resp = await fetch('/api/months');
+        const data = await resp.json();
+        const sel = document.getElementById('monthSelect');
+        const current = sel.value;
+        sel.innerHTML = '<option value="">Wszystkie</option>';
+        (data.months || []).forEach(m => {
+            sel.innerHTML += `<option value="${m}" ${m === current ? 'selected' : ''}>${m}</option>`;
+        });
+    } catch (e) {}
+}
+
+// ─── Refetch phone numbers ───────────────────────────
+async function refetchPhones() {
+    const msg = document.getElementById('refetchMsg');
+    msg.innerHTML = '<span class="spinner"></span>';
+    msg.style.color = 'var(--text)';
+    try {
+        const resp = await fetch('/api/refetch-details', { method: 'POST' });
+        const data = await resp.json();
+        if (resp.ok) {
+            msg.textContent = data.message;
+            msg.style.color = 'var(--green)';
+            // Reload table after some time for details to be fetched
+            setTimeout(() => { loadConversations(currentPage); msg.textContent = ''; }, 8000);
+        } else {
+            msg.textContent = data.detail || 'Błąd';
+            msg.style.color = 'var(--red)';
+        }
+    } catch (e) {
+        msg.textContent = 'Błąd: ' + e.message;
+        msg.style.color = 'var(--red)';
+    }
+}
+
+// ─── Export CSV on demand ────────────────────────────
+function exportCSV() {
+    const month = document.getElementById('monthSelect').value;
+    const params = new URLSearchParams();
+    if (month) params.set('month', month);
+    window.open('/api/export-csv?' + params.toString(), '_blank');
+}
+
+// ─── Init ───────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+    loadKPIs();
+    // Default: from 1st of current month to today
+    const today = new Date();
+    const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    document.getElementById('dateTo').value = today.toISOString().split('T')[0];
+    document.getElementById('dateFrom').value = firstOfMonth.toISOString().split('T')[0];
+});
+</script>
+</body>
+</html>
