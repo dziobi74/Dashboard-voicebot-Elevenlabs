@@ -400,6 +400,9 @@
                     <button class="btn btn-sm btn-secondary" onclick="refetchPhones()" title="Ponownie pobierz szczegóły dla konwersacji bez numerów telefonów">
                         Pobierz numery tel.
                     </button>
+                    <button class="btn btn-sm btn-secondary" onclick="debugMetadata()" title="Diagnostyka: pokaż surową strukturę JSON z API ElevenLabs" style="background:#e17055;">
+                        🔍 Diagnostyka JSON
+                    </button>
                     <button class="btn btn-sm btn-secondary" onclick="exportCSV()" title="Eksportuj widoczne dane do CSV">
                         Eksportuj CSV
                     </button>
@@ -411,6 +414,7 @@
                     <tr>
                         <th>Data</th>
                         <th>ID</th>
+                        <th>Źródło</th>
                         <th>Status</th>
                         <th>Wynik</th>
                         <th>Kierunek</th>
@@ -824,15 +828,29 @@ async function loadConversations(page = 1) {
 
 function renderConversations(data) {
     const body = document.getElementById('conversationsBody');
-    body.innerHTML = data.conversations.map(c => `
-        <tr>
+    body.innerHTML = data.conversations.map(c => {
+        // Source badge
+        const src = c.conversation_source || '';
+        let srcBadge = '-';
+        if (src === 'twilio') srcBadge = '<span style="background:#6c5ce7;color:#fff;padding:2px 6px;border-radius:4px;font-size:10px;">Twilio</span>';
+        else if (src === 'sip_trunk') srcBadge = '<span style="background:#00b894;color:#fff;padding:2px 6px;border-radius:4px;font-size:10px;">SIP</span>';
+        else if (src === 'react_sdk') srcBadge = '<span style="background:#636e72;color:#fff;padding:2px 6px;border-radius:4px;font-size:10px;">Web</span>';
+        else if (src) srcBadge = `<span style="background:#2d3436;color:#ddd;padding:2px 6px;border-radius:4px;font-size:10px;">${src}</span>`;
+
+        // Phone display - show "web" indicator for react_sdk conversations
+        const isWeb = (src === 'react_sdk');
+        const agentPhone = c.agent_phone ? c.agent_phone : (isWeb ? '<span style="color:#636e72;font-size:10px;">— widget —</span>' : '-');
+        const clientPhone = c.client_phone ? c.client_phone : (isWeb ? '<span style="color:#636e72;font-size:10px;">— widget —</span>' : '-');
+
+        return `<tr>
             <td>${c.start_time ? new Date(c.start_time).toLocaleString('pl-PL') : '-'}</td>
             <td style="font-size:11px; font-family:monospace;">${(c.conversation_id || '').substring(0, 12)}...</td>
+            <td>${srcBadge}</td>
             <td>${c.status}</td>
             <td><span class="badge badge-${c.call_successful}">${c.call_successful || '-'}</span></td>
             <td>${c.direction || '-'}</td>
-            <td style="font-family:monospace; font-size:12px; white-space:nowrap;">${c.agent_phone || '-'}</td>
-            <td style="font-family:monospace; font-size:12px; white-space:nowrap;">${c.client_phone || '-'}</td>
+            <td style="font-family:monospace; font-size:12px; white-space:nowrap;">${agentPhone}</td>
+            <td style="font-family:monospace; font-size:12px; white-space:nowrap;">${clientPhone}</td>
             <td>${c.duration_secs || 0}</td>
             <td>${c.message_count || 0}</td>
             <td>${c.rating || '-'}</td>
@@ -840,8 +858,8 @@ function renderConversations(data) {
             <td>${c.termination_reason || '-'}</td>
             <td style="max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"
                 title="${(c.transcript_summary || '').replace(/"/g, '&quot;')}">${c.transcript_summary || '-'}</td>
-        </tr>
-    `).join('');
+        </tr>`;
+    }).join('');
 
     // Pagination
     const totalPages = Math.ceil(data.total / data.per_page);
@@ -1000,6 +1018,75 @@ async function refetchPhones() {
         }
     } catch (e) {
         msg.textContent = 'Błąd: ' + e.message;
+        msg.style.color = 'var(--red)';
+    }
+}
+
+// ─── Debug metadata (diagnostyka JSON) ──────────────
+async function debugMetadata() {
+    const msg = document.getElementById('refetchMsg');
+    msg.innerHTML = '<span class="spinner"></span> Analizuję strukturę JSON...';
+    msg.style.color = 'var(--yellow)';
+    try {
+        const resp = await fetch('/api/debug-metadata?limit=5');
+        const data = await resp.json();
+        if (!resp.ok) {
+            msg.textContent = data.detail || 'Błąd';
+            msg.style.color = 'var(--red)';
+            return;
+        }
+        // Display results in a modal/overlay
+        let html = '<div style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.85);z-index:9999;overflow:auto;padding:40px;">';
+        html += '<div style="max-width:1200px;margin:0 auto;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;">';
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">';
+        html += '<h2 style="color:var(--accent2);">🔍 Diagnostyka struktury JSON z ElevenLabs API</h2>';
+        html += '<button onclick="this.closest(\'div[style*=fixed]\').remove()" class="btn btn-sm" style="background:var(--red);">✕ Zamknij</button></div>';
+
+        for (const diag of data.diagnostics) {
+            html += `<div style="border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:16px;">`;
+            html += `<h3 style="color:var(--accent2);margin-bottom:8px;">Conv: ${diag.conversation_id}</h3>`;
+            if (diag.error) {
+                html += `<p style="color:var(--red);">Błąd: ${diag.error}</p>`;
+            } else {
+                const hasPhone = diag.has_phone_in_db;
+                html += `<p>Telefon w bazie: <span style="color:${hasPhone ? 'var(--green)' : 'var(--red)'}">${hasPhone ? 'TAK' : 'NIE'}</span></p>`;
+                html += `<p><strong>metadata keys:</strong> ${JSON.stringify(diag.metadata_keys)}</p>`;
+                html += `<p><strong>metadata.body keys:</strong> ${JSON.stringify(diag.metadata_body_keys)}</p>`;
+
+                if (diag.phone_paths_found && diag.phone_paths_found.length > 0) {
+                    html += `<p style="color:var(--green);"><strong>Znalezione ścieżki z telefonami (${diag.phone_paths_found.length}):</strong></p>`;
+                    html += '<table style="width:100%;font-size:12px;margin:8px 0;"><tr><th>Ścieżka</th><th>Wartość</th><th>Powód</th></tr>';
+                    for (const pp of diag.phone_paths_found) {
+                        html += `<tr><td style="color:var(--yellow);word-break:break-all;">${pp.path}</td><td style="color:var(--green);">${pp.value}</td><td>${pp.reason||'phone pattern'}</td></tr>`;
+                    }
+                    html += '</table>';
+                } else {
+                    html += `<p style="color:var(--red);"><strong>Brak numerów telefonów w odpowiedzi JSON!</strong></p>`;
+                }
+
+                // Show raw metadata.body
+                html += '<details><summary style="cursor:pointer;color:var(--accent2);margin-top:8px;">📋 metadata.body (surowe dane)</summary>';
+                html += `<pre style="background:var(--bg);padding:8px;border-radius:4px;font-size:11px;overflow:auto;max-height:300px;">${JSON.stringify(diag.metadata_body_raw, null, 2)}</pre></details>`;
+
+                // Show full metadata
+                html += '<details><summary style="cursor:pointer;color:var(--accent2);margin-top:8px;">📋 Pełne metadata (surowe dane)</summary>';
+                html += `<pre style="background:var(--bg);padding:8px;border-radius:4px;font-size:11px;overflow:auto;max-height:400px;">${JSON.stringify(diag.full_metadata_raw, null, 2)}</pre></details>`;
+
+                // Show CICD / dynamic variables
+                if (diag.cicd_dynamic_variables) {
+                    html += '<details><summary style="cursor:pointer;color:var(--accent2);margin-top:8px;">📋 dynamic_variables</summary>';
+                    html += `<pre style="background:var(--bg);padding:8px;border-radius:4px;font-size:11px;overflow:auto;max-height:200px;">${JSON.stringify(diag.cicd_dynamic_variables, null, 2)}</pre></details>`;
+                }
+            }
+            html += '</div>';
+        }
+        html += '</div></div>';
+
+        document.body.insertAdjacentHTML('beforeend', html);
+        msg.textContent = `Zbadano ${data.total_checked} konwersacji. Wyniki w oknie diagnostyki.`;
+        msg.style.color = 'var(--green)';
+    } catch (e) {
+        msg.textContent = 'Błąd diagnostyki: ' + e.message;
         msg.style.color = 'var(--red)';
     }
 }

@@ -232,6 +232,7 @@ async def list_conversations(
                 "direction": c.direction,
                 "agent_phone": c.agent_phone,
                 "client_phone": c.client_phone,
+                "conversation_source": c.conversation_initiation_source,
                 "rating": c.rating,
                 "termination_reason": c.termination_reason,
                 "cost": c.cost,
@@ -334,6 +335,123 @@ async def download_csv(archive_id: int, db: Session = Depends(get_db)):
     return FileResponse(archive.file_path, media_type="text/csv", filename=os.path.basename(archive.file_path))
 
 
+@app.get("/api/debug-metadata")
+async def debug_metadata(
+    conversation_id: Optional[str] = None,
+    limit: int = 5,
+    db: Session = Depends(get_db),
+):
+    """
+    Diagnostic endpoint: fetch raw JSON detail from ElevenLabs API for
+    conversations and find ALL keys/paths that contain phone-like values.
+    Useful for discovering where phone numbers actually reside.
+    """
+    import re
+    from elevenlabs_client import ElevenLabsClient
+
+    api_key = get_setting(db, "api_key")
+    agent_id = get_setting(db, "agent_id")
+    if not api_key or not agent_id:
+        raise HTTPException(400, "API key or Agent ID not configured")
+
+    client = ElevenLabsClient(api_key)
+
+    # Collect conversations to inspect
+    if conversation_id:
+        conv_ids = [conversation_id]
+    else:
+        # Pick some with phone numbers and some without
+        with_phones = (
+            db.query(Conversation.conversation_id)
+            .filter(
+                Conversation.agent_id == agent_id,
+                Conversation.agent_phone != None,
+                Conversation.agent_phone != "",
+            )
+            .limit(2)
+            .all()
+        )
+        without_phones = (
+            db.query(Conversation.conversation_id)
+            .filter(
+                Conversation.agent_id == agent_id,
+                (Conversation.agent_phone == None) | (Conversation.agent_phone == ""),
+            )
+            .limit(3)
+            .all()
+        )
+        conv_ids = [r[0] for r in with_phones] + [r[0] for r in without_phones]
+
+    phone_pattern = re.compile(r'(\+?\d[\d\s\-]{6,15}\d)')
+
+    def find_phone_paths(obj, path=""):
+        """Recursively find all paths in JSON that contain phone-like values."""
+        results = []
+        if isinstance(obj, dict):
+            for k, v in obj.items():
+                new_path = f"{path}.{k}" if path else k
+                results.extend(find_phone_paths(v, new_path))
+        elif isinstance(obj, list):
+            for i, v in enumerate(obj):
+                new_path = f"{path}[{i}]"
+                results.extend(find_phone_paths(v, new_path))
+        elif isinstance(obj, str):
+            if phone_pattern.search(obj):
+                results.append({"path": path, "value": obj})
+            # Also flag phone-related key names
+            lower_path = path.lower()
+            if any(kw in lower_path for kw in ("phone", "number", "caller", "called", "from", "to", "sip", "dial", "tel")):
+                results.append({"path": path, "value": str(obj), "reason": "phone-related key name"})
+        elif isinstance(obj, (int, float)):
+            s = str(obj)
+            if len(s) >= 8 and phone_pattern.search(s):
+                results.append({"path": path, "value": s, "reason": "numeric phone-like"})
+        return results
+
+    diagnostics = []
+    for cid in conv_ids[:limit]:
+        try:
+            detail = await client.get_conversation_detail(cid)
+            # Find all phone-like paths
+            phone_paths = find_phone_paths(detail)
+            # Also dump top-level metadata structure
+            meta = detail.get("metadata", {})
+            meta_keys = list(meta.keys()) if isinstance(meta, dict) else str(type(meta))
+            body = meta.get("body", {}) if isinstance(meta, dict) else {}
+            body_keys = list(body.keys()) if isinstance(body, dict) else str(type(body))
+
+            # Check conversation_initiation_client_data
+            cicd = detail.get("conversation_initiation_client_data", {})
+            cicd_keys = list(cicd.keys()) if isinstance(cicd, dict) else str(type(cicd))
+
+            # Dump entire metadata and cicd as raw JSON for inspection
+            diagnostics.append({
+                "conversation_id": cid,
+                "has_phone_in_db": bool(
+                    db.query(Conversation)
+                    .filter(
+                        Conversation.conversation_id == cid,
+                        Conversation.agent_phone != None,
+                        Conversation.agent_phone != "",
+                    )
+                    .first()
+                ),
+                "phone_paths_found": phone_paths,
+                "metadata_keys": meta_keys,
+                "metadata_body_keys": body_keys,
+                "metadata_body_raw": body if isinstance(body, dict) else str(body),
+                "metadata_phone_call": meta.get("phone_call") if isinstance(meta, dict) else None,
+                "cicd_keys": cicd_keys,
+                "cicd_dynamic_variables": cicd.get("dynamic_variables") if isinstance(cicd, dict) else None,
+                "full_metadata_raw": meta,
+            })
+            await asyncio.sleep(0.2)
+        except Exception as e:
+            diagnostics.append({"conversation_id": cid, "error": str(e)})
+
+    return {"diagnostics": diagnostics, "total_checked": len(diagnostics)}
+
+
 @app.get("/api/export-csv")
 async def export_csv_on_demand(
     agent_id: Optional[str] = None,
@@ -361,7 +479,7 @@ async def export_csv_on_demand(
     fields = [
         "conversation_id", "agent_id", "agent_name", "status", "call_successful",
         "start_time_unix", "call_duration_secs", "message_count",
-        "direction", "agent_phone", "client_phone",
+        "direction", "conversation_initiation_source", "agent_phone", "client_phone",
         "rating", "cost", "termination_reason",
         "transcript_summary", "call_summary_title",
         "main_language", "tool_names",

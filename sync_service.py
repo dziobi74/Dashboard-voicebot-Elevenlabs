@@ -127,11 +127,16 @@ async def sync_conversations(
                 try:
                     detail = await client.get_conversation_detail(conv_row.conversation_id)
 
-                    # Log metadata structure for first conversation (debug phone extraction)
-                    if details_count == 0:
+                    # Log metadata structure for debugging (first 3 conversations)
+                    if details_count < 3:
                         _log_metadata_debug(conv_row.conversation_id, detail)
 
                     _update_conversation_details(conv_row, detail)
+
+                    # Extra logging: if still no phone after extraction, log warning
+                    if not conv_row.agent_phone and not conv_row.client_phone:
+                        if details_count < 10:  # log up to 10 missing
+                            logger.warning(f"[PHONE MISSING] {conv_row.conversation_id} - no phone found after extraction")
                     details_count += 1
                     if details_count % 10 == 0:
                         db.commit()
@@ -165,26 +170,75 @@ async def sync_conversations(
 
 
 def _log_metadata_debug(conversation_id: str, detail: dict):
-    """Log metadata keys for debugging phone number extraction (first conv only)."""
+    """Log full metadata structure for debugging phone number extraction."""
     meta = detail.get("metadata", {})
     body = meta.get("body", {})
     phone_call = meta.get("phone_call", {})
     client_data = detail.get("conversation_initiation_client_data", {})
 
-    logger.info(f"[DEBUG PHONE] conversation_id={conversation_id}")
+    logger.info(f"[DEBUG PHONE] ===== conversation_id={conversation_id} =====")
     logger.info(f"[DEBUG PHONE] metadata keys: {list(meta.keys()) if isinstance(meta, dict) else type(meta)}")
+
+    # Log FULL metadata.body
     if body:
-        logger.info(f"[DEBUG PHONE] metadata.body keys: {list(body.keys()) if isinstance(body, dict) else type(body)}")
-        # Log phone-related values
-        for k in ("From", "To", "from_number", "to_number", "from", "to", "Caller", "Called"):
-            if isinstance(body, dict) and k in body:
-                logger.info(f"[DEBUG PHONE] metadata.body.{k} = {body[k]}")
+        logger.info(f"[DEBUG PHONE] metadata.body FULL: {json.dumps(body, default=str, ensure_ascii=False)[:2000]}")
+    else:
+        logger.info(f"[DEBUG PHONE] metadata.body is EMPTY or missing")
+
+    # Log phone_call
     if phone_call:
-        logger.info(f"[DEBUG PHONE] metadata.phone_call: {phone_call}")
+        logger.info(f"[DEBUG PHONE] metadata.phone_call FULL: {json.dumps(phone_call, default=str, ensure_ascii=False)[:1000]}")
+    else:
+        logger.info(f"[DEBUG PHONE] metadata.phone_call is EMPTY or missing")
+
+    # Log client_data
     if client_data:
-        dyn = client_data.get("dynamic_variables", {})
-        if dyn:
-            logger.info(f"[DEBUG PHONE] dynamic_variables keys: {list(dyn.keys()) if isinstance(dyn, dict) else type(dyn)}")
+        logger.info(f"[DEBUG PHONE] conversation_initiation_client_data FULL: {json.dumps(client_data, default=str, ensure_ascii=False)[:1000]}")
+    else:
+        logger.info(f"[DEBUG PHONE] conversation_initiation_client_data is EMPTY or missing")
+
+    # Deep search for phone numbers
+    phone_values = _deep_find_phone_values(detail)
+    if phone_values:
+        logger.info(f"[DEBUG PHONE] Deep search found {len(phone_values)} phone-like values:")
+        for path, value in phone_values[:20]:
+            logger.info(f"[DEBUG PHONE]   {path} = {value}")
+    else:
+        logger.info(f"[DEBUG PHONE] Deep search found NO phone-like values in entire response")
+
+    # Log ALL top-level detail keys
+    logger.info(f"[DEBUG PHONE] detail top-level keys: {list(detail.keys()) if isinstance(detail, dict) else type(detail)}")
+
+    # Log any nested dicts in metadata we might have missed
+    if isinstance(meta, dict):
+        for k, v in meta.items():
+            if k not in ("body", "phone_call") and isinstance(v, dict):
+                logger.info(f"[DEBUG PHONE] metadata.{k} (dict): {json.dumps(v, default=str, ensure_ascii=False)[:500]}")
+            elif k not in ("body", "phone_call", "termination_reason", "cost",
+                          "call_duration_secs", "start_time_unix_secs"):
+                logger.info(f"[DEBUG PHONE] metadata.{k} = {str(v)[:200]}")
+
+
+def _deep_find_phone_values(obj, path=""):
+    """
+    Recursively search entire JSON for phone-number-like values.
+    Returns list of (path, value) tuples.
+    """
+    import re
+    phone_re = re.compile(r'^\+?\d[\d\s\-]{6,15}\d$')
+    results = []
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            new_path = f"{path}.{k}" if path else k
+            results.extend(_deep_find_phone_values(v, new_path))
+    elif isinstance(obj, list):
+        for i, v in enumerate(obj):
+            results.extend(_deep_find_phone_values(v, f"{path}[{i}]"))
+    elif isinstance(obj, str):
+        stripped = obj.strip()
+        if phone_re.match(stripped):
+            results.append((path, stripped))
+    return results
 
 
 def _extract_phone_numbers(detail: dict, meta: dict) -> tuple:
@@ -196,6 +250,8 @@ def _extract_phone_numbers(detail: dict, meta: dict) -> tuple:
       2. SIP Trunking:  metadata.body.to_number / metadata.body.from_number
       3. phone_call:    metadata.phone_call.agent_number / external_number
       4. conversation_initiation_client_data.dynamic_variables
+      5. Deep recursive search in entire metadata for phone-related keys
+      6. Deep recursive search for any phone-like value patterns
     """
     agent_phone = None
     client_phone = None
@@ -221,13 +277,24 @@ def _extract_phone_numbers(detail: dict, meta: dict) -> tuple:
         if not client_phone and body.get("from"):
             client_phone = body["from"]
 
+        # Additional Twilio fields: Caller / Called
+        if not agent_phone and body.get("Called"):
+            agent_phone = body["Called"]
+        if not client_phone and body.get("Caller"):
+            client_phone = body["Caller"]
+
     # --- Source 3: metadata.phone_call ---
     phone_call = meta.get("phone_call", {})
     if phone_call and isinstance(phone_call, dict):
         if not agent_phone:
-            agent_phone = phone_call.get("agent_number") or phone_call.get("to_number")
+            agent_phone = phone_call.get("agent_number") or phone_call.get("to_number") or phone_call.get("to")
         if not client_phone:
-            client_phone = phone_call.get("external_number") or phone_call.get("from_number")
+            client_phone = phone_call.get("external_number") or phone_call.get("from_number") or phone_call.get("from")
+        # Also try phone_number fields
+        if not agent_phone:
+            agent_phone = phone_call.get("agent_phone_number") or phone_call.get("called_number")
+        if not client_phone:
+            client_phone = phone_call.get("caller_phone_number") or phone_call.get("caller_number")
 
     # --- Source 4: conversation_initiation_client_data ---
     client_data = detail.get("conversation_initiation_client_data", {})
@@ -235,9 +302,47 @@ def _extract_phone_numbers(detail: dict, meta: dict) -> tuple:
         dyn = client_data.get("dynamic_variables", {})
         if dyn and isinstance(dyn, dict):
             if not agent_phone:
-                agent_phone = dyn.get("agent_number") or dyn.get("to_number") or dyn.get("To")
+                agent_phone = (dyn.get("agent_number") or dyn.get("to_number")
+                               or dyn.get("To") or dyn.get("agent_phone")
+                               or dyn.get("called_number") or dyn.get("Called"))
             if not client_phone:
-                client_phone = dyn.get("customer_number") or dyn.get("from_number") or dyn.get("From")
+                client_phone = (dyn.get("customer_number") or dyn.get("from_number")
+                                or dyn.get("From") or dyn.get("client_phone")
+                                or dyn.get("caller_number") or dyn.get("Caller")
+                                or dyn.get("phone") or dyn.get("phone_number")
+                                or dyn.get("customer_phone"))
+
+    # --- Source 5: Deep search in metadata for phone-related keys ---
+    if (not agent_phone or not client_phone) and isinstance(meta, dict):
+        deep_result = {}
+        _deep_search_in_dict(meta, "agent_phone", "client_phone",
+                             agent_phone, client_phone, deep_result)
+        if not agent_phone and deep_result.get("agent"):
+            agent_phone = deep_result["agent"]
+        if not client_phone and deep_result.get("client"):
+            client_phone = deep_result["client"]
+
+    # --- Source 6: Deep recursive search in full detail as last resort ---
+    if not agent_phone or not client_phone:
+        phone_values = _deep_find_phone_values(detail)
+        if phone_values:
+            # Classify found phone values by path context
+            for path, value in phone_values:
+                path_lower = path.lower()
+                if not agent_phone and any(kw in path_lower for kw in
+                    ("agent", "to_number", ".to", "called", "voicebot", "bot_number")):
+                    agent_phone = value
+                elif not client_phone and any(kw in path_lower for kw in
+                    ("client", "customer", "from_number", ".from", "caller", "external", "user_phone")):
+                    client_phone = value
+
+            # If still missing, assign first/second found phone generically
+            if not agent_phone and not client_phone and len(phone_values) >= 2:
+                agent_phone = phone_values[0][1]
+                client_phone = phone_values[1][1]
+            elif not agent_phone and not client_phone and len(phone_values) == 1:
+                # Only one phone found - log it and assign to client (more common)
+                client_phone = phone_values[0][1]
 
     # Normalize: strip whitespace
     if agent_phone:
@@ -246,6 +351,27 @@ def _extract_phone_numbers(detail: dict, meta: dict) -> tuple:
         client_phone = str(client_phone).strip()
 
     return agent_phone, client_phone
+
+
+def _deep_search_in_dict(d: dict, agent_key_hint: str, client_key_hint: str,
+                          existing_agent, existing_client, result: dict):
+    """Search dict recursively for keys containing phone/number related names."""
+    agent_keywords = {"agent_number", "to_number", "To", "Called", "agent_phone",
+                      "called_number", "bot_number", "destination_number", "dialed_number",
+                      "agent_phone_number", "to"}
+    client_keywords = {"from_number", "From", "Caller", "external_number", "customer_number",
+                       "caller_number", "client_phone", "source_number", "originating_number",
+                       "customer_phone", "phone_number", "phone", "from", "caller_phone_number"}
+
+    for k, v in d.items():
+        if isinstance(v, dict):
+            _deep_search_in_dict(v, agent_key_hint, client_key_hint,
+                                existing_agent, existing_client, result)
+        elif isinstance(v, str) and v.strip():
+            if not existing_agent and not result.get("agent") and k in agent_keywords:
+                result["agent"] = v.strip()
+            if not existing_client and not result.get("client") and k in client_keywords:
+                result["client"] = v.strip()
 
 
 def _update_conversation_details(conv: Conversation, detail: dict):
