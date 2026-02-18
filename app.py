@@ -546,9 +546,11 @@ async def export_csv_on_demand(
             base_row = [date_str] + [getattr(c, field, "") or "" for field in fields]
             ecr = parsed_criteria.get(c.conversation_id, {})
             criteria_row = []
+            result_map = {"success": "2", "failure": "0", "unknown": "1"}
             for cid in sorted_criteria_ids:
                 crit = ecr.get(cid)
-                criteria_row.append(crit.get("result", "") if isinstance(crit, dict) else "")
+                raw = crit.get("result", "") if isinstance(crit, dict) else ""
+                criteria_row.append(result_map.get(raw, raw))
             writer.writerow(base_row + criteria_row)
 
     return FileResponse(

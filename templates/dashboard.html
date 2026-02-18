@@ -830,9 +830,9 @@ async function loadConversations(page = 1) {
 
 function criteriaResultBadge(result) {
     if (!result) return '<span style="color:#636e72;font-size:11px;">—</span>';
-    if (result === 'success') return '<span style="color:#00b894;font-weight:600;font-size:11px;" title="success">&#10004;</span>';
-    if (result === 'failure') return '<span style="color:#e17055;font-weight:600;font-size:11px;" title="failure">&#10008;</span>';
-    return '<span style="color:#fdcb6e;font-size:11px;" title="' + result + '">?</span>';
+    if (result === 'success') return '<span style="color:#00b894;font-weight:600;font-size:12px;" title="success">2</span>';
+    if (result === 'failure') return '<span style="color:#e17055;font-weight:600;font-size:12px;" title="failure">0</span>';
+    return '<span style="color:#fdcb6e;font-weight:600;font-size:12px;" title="' + result + '">1</span>';
 }
 
 function renderConversations(data) {
