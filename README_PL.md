@@ -1,6 +1,6 @@
 # Voicebot Dashboard - Analityka ElevenLabs
 
-**Wersja 0.8** | Autor: Robert Malek
+**Wersja 0.9** | Autor: Robert Malek
 
 > [English documentation](README.md)
 
@@ -13,17 +13,61 @@ Samodzielnie hostowany dashboard webowy do monitorowania i analizy wydajnosci vo
 
 ---
 
+## Szybka instalacja (Windows)
+
+### Krok 1: Pobierz
+```
+git clone https://github.com/dziobi74/Dashboard-voicebot-Elevenlabs.git
+```
+lub pobierz ZIP z GitHub i rozpakuj.
+
+### Krok 2: Zainstaluj
+Kliknij dwukrotnie **`install.bat`** — to wszystko!
+
+Instalator automatycznie:
+- Sprawdzi czy Python 3.10+ jest zainstalowany
+- Utworzy srodowisko wirtualne
+- Zainstaluje wszystkie zaleznosci
+- Utworzy skrot na pulpicie
+- Zapyta czy uruchomic dashboard
+
+### Krok 3: Uruchom
+- Kliknij ikone **"Voicebot Dashboard"** na pulpicie
+- lub uruchom **`start.bat`**
+- Dashboard otworzy sie automatycznie w przegladarce: **http://localhost:8000**
+
+### Krok 4: Skonfiguruj
+Przy pierwszym uruchomieniu w zakladce **"Ustawienia"** podaj:
+- **API Key ElevenLabs** — [pobierz tutaj](https://elevenlabs.io/app/settings/api-keys)
+- **Agent ID** — z ustawien agenta w panelu ElevenLabs
+
+---
+
+## Pliki instalacyjne
+
+| Plik | Opis |
+|------|------|
+| `install.bat` | Jednorazowa instalacja (venv, pakiety, skrot na pulpicie) |
+| `start.bat` | Uruchomienie dashboardu + otwarcie przegladarki |
+| `stop.bat` | Zatrzymanie serwera |
+| `uninstall.bat` | Usiniecie srodowiska (zachowuje baze danych i archiwa) |
+| `run.bat` | Alias do start.bat (kompatybilnosc wsteczna) |
+
+---
+
 ## Funkcjonalnosci
 
 - **Dashboard KPI w czasie rzeczywistym** z 12 kluczowymi wskaznikami
 - **Interaktywne wykresy** (Chart.js) - konwersja, trendy dzienne, czas rozmow, koszty
 - **Tabela konwersacji** z paginacja, numerami telefonow, ocenami, podsumowaniami
+- **Kryteria oceny** w tabeli — kolorowe wartosci 2/1/0 (sukces/unknown/failure) dla kazdego kryterium
+- **Kolumna zrodla** — kolorowe badge Twilio / SIP / Web dla identyfikacji kanalu
 - **Ekstrakcja numerow telefonow** - obsluga providerow Twilio i SIP Trunking
 - **Automatyczna codzienna synchronizacja** - scheduler pobiera dane przyrostowo od 1. dnia miesiaca
-- **Eksport CSV na zadanie** - eksport filtrowanych danych jednym kliknieciem
+- **Eksport CSV na zadanie** — eksport z osobnymi kolumnami kryteriow (0/1/2)
 - **Miesieczna archiwizacja CSV** - automatyczna archiwizacja w pierwszych 5 dniach kazdego miesiaca
 - **Lokalna baza SQLite** - wszystkie dane przechowywane lokalnie
-- **Skrot na pulpicie** z wlasna ikona (Windows)
+- **Jednorazowa instalacja** - install.bat i gotowe
 
 ## Wskazniki KPI
 
@@ -42,33 +86,19 @@ Samodzielnie hostowany dashboard webowy do monitorowania i analizy wydajnosci vo
 | 11 | **Trendy dzienne** | Wykresy dziennego wolumenu, sukcesu, czasu, kosztow |
 | 12 | **Kierunek polaczen** | Przychodzace vs wychodzace |
 
-## Wymagania
+## Wymagania systemowe
 
-- Python 3.10+
-- Klucz API ElevenLabs (z dostepem do Conversational AI)
-- ID agenta ElevenLabs
+- **Windows 10/11** (dla install.bat) lub Linux/macOS (recznie)
+- **Python 3.10+** — [pobierz](https://www.python.org/downloads/) (zaznacz "Add Python to PATH")
+- **Klucz API ElevenLabs** z dostepem do Conversational AI
+- **ID agenta ElevenLabs**
 
-## Szybki start
+## Instalacja reczna (Linux / macOS)
 
-### Windows
 ```bash
 cd voicebot-dashboard
-run.bat
-```
-
-### Linux / macOS
-```bash
-cd voicebot-dashboard
-chmod +x run.sh
-./run.sh
-```
-
-### Recznie
-```bash
-cd voicebot-dashboard
-python -m venv venv
-source venv/bin/activate   # Linux/Mac
-# venv\Scripts\activate    # Windows
+python3 -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
 python app.py
 ```
@@ -98,27 +128,31 @@ Klucz API jest przechowywany wylacznie w lokalnej bazie SQLite. Nie jest nigdzie
 ### Eksport CSV
 - **Na zadanie**: Zakladka "Tabela konwersacji" -> przycisk **"Eksportuj CSV"**
 - **Archiwizacja miesieczna**: Zakladka "Archiwa CSV" -> wybierz miesiac -> **"Archiwizuj wybrany miesiac"**
+- Eksport zawiera osobne kolumny kryteriow z wartosciami: **2** (sukces), **1** (unknown), **0** (failure)
 
 ### Numery telefonow
 Numery telefonow sa wyciagane ze szczegolów konwersacji. Obslugiwani providerzy:
 - **Twilio**: `metadata.body.From` (klient) / `metadata.body.To` (voicebot)
 - **SIP Trunking**: `metadata.body.from_number` (klient) / `metadata.body.to_number` (voicebot)
-
-Jesli numery telefonow sa puste, uzyj przycisku **"Pobierz numery tel."** aby ponownie pobrac szczegoly.
+- **React SDK (Web)**: Konwersacje z widgetu webowego — brak numerow telefonow (to normalne)
 
 ## Struktura projektu
 
 ```
 voicebot-dashboard/
+  install.bat             - Jednorazowy instalator (Windows)
+  start.bat               - Uruchomienie serwera + przegladarka
+  stop.bat                - Zatrzymanie serwera
+  uninstall.bat           - Deinstalacja (zachowuje dane)
+  run.bat                 - Alias do start.bat
   app.py                  - Serwer FastAPI, scheduler, endpointy API
   database.py             - Modele SQLAlchemy (SQLite)
   elevenlabs_client.py    - Klient API ElevenLabs
-  sync_service.py         - Logika synchronizacji, obliczanie KPI, archiwizacja CSV
-  create_icon.py          - Generator ikony + tworzenie skrotu na pulpicie
+  sync_service.py         - Logika synchronizacji, KPI, archiwizacja CSV
+  create_icon.py          - Generator ikony + skrot na pulpicie
   requirements.txt        - Zaleznosci Python
-  run.bat / run.sh        - Skrypty startowe
   voicebot.ico            - Ikona aplikacji
-  .gitignore              - Wylaczenia git (baza, venv, archiwa CSV)
+  .gitignore              - Wylaczenia git
   templates/
     dashboard.html        - Jednostronicowy dashboard (HTML + JS + Chart.js)
   static/                 - Katalog plikow statycznych
@@ -134,21 +168,15 @@ voicebot-dashboard/
 | POST | `/api/settings` | Zapisz klucz API i Agent ID |
 | POST | `/api/sync` | Uruchom reczna synchronizacje |
 | GET | `/api/kpis?month=YYYY-MM` | Pobierz obliczone KPI |
-| GET | `/api/conversations?month=&page=&per_page=` | Lista konwersacji |
+| GET | `/api/conversations?month=&page=&per_page=` | Lista konwersacji z kryteriami |
 | GET | `/api/months` | Dostepne partycje miesieczne |
-| GET | `/api/export-csv?month=` | Eksport konwersacji do CSV |
+| GET | `/api/export-csv?month=` | Eksport konwersacji do CSV (z kolumnami kryteriow) |
 | POST | `/api/archive?month=YYYY-MM` | Archiwizuj miesiac do CSV |
 | GET | `/api/archives` | Lista istniejacych archiwow |
 | GET | `/api/download-csv/{id}` | Pobierz zarchiwizowany CSV |
-| POST | `/api/refetch-details` | Ponownie pobierz szczegoly dla konwersacji bez numerow telefonow |
+| POST | `/api/refetch-details` | Ponownie pobierz szczegoly konwersacji |
 | GET | `/api/sync-logs` | Historia synchronizacji |
-
-## Integracja z API ElevenLabs
-
-Aplikacja korzysta z dwoch endpointow API ElevenLabs:
-
-1. **`GET /v1/convai/conversations`** - Lista konwersacji z paginacja, filtrowanie po agent_id i zakresie dat
-2. **`GET /v1/convai/conversations/{conversation_id}`** - Szczegoly konwersacji: transkrypt, analiza, numery telefonow, koszt
+| GET | `/api/debug-metadata` | Diagnostyka surowych metadanych JSON |
 
 ## Bezpieczenstwo
 
@@ -156,14 +184,6 @@ Aplikacja korzysta z dwoch endpointow API ElevenLabs:
 - Plik bazy danych jest wykluczony z gita przez `.gitignore`
 - Zadne dane nie sa wysylane do stron trzecich - tylko bezposrednia komunikacja z API ElevenLabs
 - Aplikacja dziala lokalnie na `localhost:8000`
-
-## Ikona na pulpicie (Windows)
-
-Aby utworzyc skrot na pulpicie z wlasna ikona:
-```bash
-python create_icon.py
-```
-Tworzy plik `voicebot.ico` i skrot na pulpicie.
 
 ## Stack technologiczny
 
@@ -176,7 +196,10 @@ Tworzy plik `voicebot.ico` i skrot na pulpicie.
 
 | Wersja | Data | Zmiany |
 |--------|------|--------|
-| 0.8 | 2025-02 | Pierwsze wydanie - dashboard, KPI, synchronizacja, eksport CSV, numery telefonow, ikona pulpitu |
+| 0.9 | 2026-02 | Profesjonalny instalator one-click, start/stop/uninstall, skrot na pulpicie |
+| 0.8.2 | 2026-02 | Kryteria oceny w tabeli i CSV (2/1/0), kolumna zrodla (Twilio/SIP/Web) |
+| 0.8.1 | 2026-02 | Diagnostyka metadanych, ulepszona ekstrakcja numerow telefonow |
+| 0.8 | 2026-02 | Pierwsze wydanie - dashboard, KPI, synchronizacja, eksport CSV, numery telefonow, ikona pulpitu |
 
 ## Licencja
 

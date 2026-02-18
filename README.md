@@ -1,6 +1,6 @@
 # Voicebot Dashboard - ElevenLabs Analytics
 
-**Version 0.8** | Author: Robert Malek
+**Version 0.9** | Author: Robert Malek
 
 > [Dokumentacja po polsku / Polish documentation](README_PL.md)
 
@@ -13,17 +13,61 @@ A self-hosted web dashboard for monitoring and analyzing ElevenLabs Conversation
 
 ---
 
+## Quick Install (Windows)
+
+### Step 1: Download
+```
+git clone https://github.com/dziobi74/Dashboard-voicebot-Elevenlabs.git
+```
+or download ZIP from GitHub and extract.
+
+### Step 2: Install
+Double-click **`install.bat`** — that's it!
+
+The installer automatically:
+- Checks Python 3.10+ is installed
+- Creates a virtual environment
+- Installs all dependencies
+- Creates a desktop shortcut
+- Asks to launch the dashboard
+
+### Step 3: Run
+- Click **"Voicebot Dashboard"** icon on your desktop
+- or run **`start.bat`**
+- Dashboard opens automatically in your browser: **http://localhost:8000**
+
+### Step 4: Configure
+On first launch, go to **"Ustawienia"** (Settings) tab and enter:
+- **ElevenLabs API Key** — [get it here](https://elevenlabs.io/app/settings/api-keys)
+- **Agent ID** — from your agent settings in ElevenLabs panel
+
+---
+
+## Installer Files
+
+| File | Description |
+|------|-------------|
+| `install.bat` | One-time setup (venv, packages, desktop shortcut) |
+| `start.bat` | Launch dashboard + open browser |
+| `stop.bat` | Stop the server |
+| `uninstall.bat` | Remove environment (preserves database and archives) |
+| `run.bat` | Alias for start.bat (backward compatibility) |
+
+---
+
 ## Features
 
 - **Real-time KPI dashboard** with 12 key performance indicators
 - **Interactive charts** (Chart.js) - conversion rates, daily trends, call duration, costs
 - **Conversation table** with pagination, phone numbers, ratings, summaries
+- **Evaluation criteria** in table — colored 2/1/0 values (success/unknown/failure) per criterion
+- **Source column** — colored badges for Twilio / SIP / Web channel identification
 - **Phone number extraction** supporting Twilio and SIP Trunking providers
 - **Automatic daily sync** - scheduler fetches data incrementally from 1st of current month
-- **CSV export on demand** - export filtered data with one click
+- **CSV export on demand** — export with separate criteria columns (0/1/2)
 - **Monthly CSV archival** - automatic archival in first 5 days of each month
 - **Local SQLite database** - all data stored locally, no external dependencies
-- **Desktop shortcut** with custom icon (Windows)
+- **One-click installer** — install.bat and you're ready to go
 
 ## KPI Indicators
 
@@ -42,33 +86,19 @@ A self-hosted web dashboard for monitoring and analyzing ElevenLabs Conversation
 | 11 | **Daily trends** | Charts showing daily volume, success rate, duration, cost |
 | 12 | **Call direction** | Inbound vs outbound breakdown |
 
-## Requirements
+## System Requirements
 
-- Python 3.10+
-- ElevenLabs API key (with Conversational AI access)
-- ElevenLabs Agent ID
+- **Windows 10/11** (for install.bat) or Linux/macOS (manual setup)
+- **Python 3.10+** — [download](https://www.python.org/downloads/) (check "Add Python to PATH")
+- **ElevenLabs API key** with Conversational AI access
+- **ElevenLabs Agent ID**
 
-## Quick Start
+## Manual Install (Linux / macOS)
 
-### Windows
 ```bash
 cd voicebot-dashboard
-run.bat
-```
-
-### Linux / macOS
-```bash
-cd voicebot-dashboard
-chmod +x run.sh
-./run.sh
-```
-
-### Manual
-```bash
-cd voicebot-dashboard
-python -m venv venv
-source venv/bin/activate   # Linux/Mac
-# venv\Scripts\activate    # Windows
+python3 -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
 python app.py
 ```
@@ -98,27 +128,31 @@ The API key is stored in the local SQLite database only. It is never sent anywhe
 ### CSV Export
 - **On-demand export**: Go to "Tabela konwersacji" tab, click **"Eksportuj CSV"**
 - **Monthly archival**: Go to "Archiwa CSV" tab, select month, click **"Archiwizuj"**
+- Export includes separate criteria columns with values: **2** (success), **1** (unknown), **0** (failure)
 
 ### Phone Numbers
 Phone numbers are extracted from conversation details. Supported providers:
 - **Twilio**: `metadata.body.From` / `metadata.body.To`
 - **SIP Trunking**: `metadata.body.from_number` / `metadata.body.to_number`
-
-If phone numbers are missing, use the **"Pobierz numery tel."** button to re-fetch details.
+- **React SDK (Web)**: Web widget conversations — no phone numbers (this is normal)
 
 ## Project Structure
 
 ```
 voicebot-dashboard/
+  install.bat             - One-click installer (Windows)
+  start.bat               - Launch server + browser
+  stop.bat                - Stop server
+  uninstall.bat           - Uninstall (preserves data)
+  run.bat                 - Alias for start.bat
   app.py                  - FastAPI server, scheduler, API endpoints
   database.py             - SQLAlchemy models (SQLite)
   elevenlabs_client.py    - ElevenLabs API client
   sync_service.py         - Sync logic, KPI computation, CSV archival
   create_icon.py          - Icon generator + desktop shortcut creator
   requirements.txt        - Python dependencies
-  run.bat / run.sh        - Startup scripts
   voicebot.ico            - Application icon
-  .gitignore              - Git exclusions (database, venv, CSV archives)
+  .gitignore              - Git exclusions
   templates/
     dashboard.html        - Single-page dashboard (HTML + JS + Chart.js)
   static/                 - Static files directory
@@ -134,21 +168,15 @@ voicebot-dashboard/
 | POST | `/api/settings` | Save API key and Agent ID |
 | POST | `/api/sync` | Trigger manual data sync |
 | GET | `/api/kpis?month=YYYY-MM` | Get computed KPIs |
-| GET | `/api/conversations?month=&page=&per_page=` | List conversations |
+| GET | `/api/conversations?month=&page=&per_page=` | List conversations with criteria |
 | GET | `/api/months` | Available month partitions |
-| GET | `/api/export-csv?month=` | Export conversations to CSV |
+| GET | `/api/export-csv?month=` | Export conversations to CSV (with criteria columns) |
 | POST | `/api/archive?month=YYYY-MM` | Archive month to CSV |
 | GET | `/api/archives` | List existing archives |
 | GET | `/api/download-csv/{id}` | Download archived CSV |
-| POST | `/api/refetch-details` | Re-fetch details for conversations missing phone numbers |
+| POST | `/api/refetch-details` | Re-fetch conversation details |
 | GET | `/api/sync-logs` | Sync history |
-
-## ElevenLabs API Integration
-
-The application uses two ElevenLabs API endpoints:
-
-1. **`GET /v1/convai/conversations`** - List conversations with pagination, filtering by agent_id and date range
-2. **`GET /v1/convai/conversations/{conversation_id}`** - Conversation details including transcript, analysis, phone numbers, cost
+| GET | `/api/debug-metadata` | Raw metadata JSON diagnostics |
 
 ## Security Notes
 
@@ -156,14 +184,6 @@ The application uses two ElevenLabs API endpoints:
 - The database file is excluded from git via `.gitignore`
 - No data is sent to third parties - only direct communication with ElevenLabs API
 - The application runs locally on `localhost:8000`
-
-## Desktop Icon (Windows)
-
-To create a desktop shortcut with custom icon:
-```bash
-python create_icon.py
-```
-This generates `voicebot.ico` and creates a shortcut on your Desktop.
 
 ## Tech Stack
 
@@ -176,7 +196,10 @@ This generates `voicebot.ico` and creates a shortcut on your Desktop.
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 0.8 | 2025-02 | Initial release - dashboard, KPIs, sync, CSV export, phone numbers, desktop icon |
+| 0.9 | 2026-02 | Professional one-click installer, start/stop/uninstall, desktop shortcut |
+| 0.8.2 | 2026-02 | Evaluation criteria in table and CSV (2/1/0), source column (Twilio/SIP/Web) |
+| 0.8.1 | 2026-02 | Metadata diagnostics, enhanced phone number extraction |
+| 0.8 | 2026-02 | Initial release - dashboard, KPIs, sync, CSV export, phone numbers, desktop icon |
 
 ## License
 

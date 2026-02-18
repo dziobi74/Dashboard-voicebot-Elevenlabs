@@ -26,7 +26,7 @@ from sync_service import (
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Voicebot Dashboard", version="1.0.0")
+app = FastAPI(title="Voicebot Dashboard", version="0.9.0")
 
 TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), "templates")
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
