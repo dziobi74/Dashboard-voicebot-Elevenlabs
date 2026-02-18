@@ -216,30 +216,57 @@ async def list_conversations(
     total = query.count()
     conversations = query.offset((page - 1) * per_page).limit(per_page).all()
 
+    # Collect all unique criteria IDs across the page for column headers
+    all_criteria_ids = set()
+    parsed_criteria = {}
+    for c in conversations:
+        if c.evaluation_criteria_results:
+            try:
+                ecr = json.loads(c.evaluation_criteria_results)
+                if isinstance(ecr, dict):
+                    parsed_criteria[c.conversation_id] = ecr
+                    all_criteria_ids.update(ecr.keys())
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+    sorted_criteria_ids = sorted(all_criteria_ids)
+
+    conv_list = []
+    for c in conversations:
+        ecr = parsed_criteria.get(c.conversation_id, {})
+        criteria_results = {}
+        for crit_id in sorted_criteria_ids:
+            crit = ecr.get(crit_id)
+            if crit and isinstance(crit, dict):
+                criteria_results[crit_id] = crit.get("result", None)
+            else:
+                criteria_results[crit_id] = None
+
+        conv_list.append({
+            "conversation_id": c.conversation_id,
+            "agent_name": c.agent_name,
+            "status": c.status,
+            "call_successful": c.call_successful,
+            "start_time": datetime.utcfromtimestamp(c.start_time_unix).isoformat() if c.start_time_unix else None,
+            "duration_secs": c.call_duration_secs,
+            "message_count": c.message_count,
+            "direction": c.direction,
+            "agent_phone": c.agent_phone,
+            "client_phone": c.client_phone,
+            "conversation_source": c.conversation_initiation_source,
+            "rating": c.rating,
+            "termination_reason": c.termination_reason,
+            "cost": c.cost,
+            "transcript_summary": c.transcript_summary,
+            "criteria": criteria_results,
+        })
+
     return {
         "total": total,
         "page": page,
         "per_page": per_page,
-        "conversations": [
-            {
-                "conversation_id": c.conversation_id,
-                "agent_name": c.agent_name,
-                "status": c.status,
-                "call_successful": c.call_successful,
-                "start_time": datetime.utcfromtimestamp(c.start_time_unix).isoformat() if c.start_time_unix else None,
-                "duration_secs": c.call_duration_secs,
-                "message_count": c.message_count,
-                "direction": c.direction,
-                "agent_phone": c.agent_phone,
-                "client_phone": c.client_phone,
-                "conversation_source": c.conversation_initiation_source,
-                "rating": c.rating,
-                "termination_reason": c.termination_reason,
-                "cost": c.cost,
-                "transcript_summary": c.transcript_summary,
-            }
-            for c in conversations
-        ],
+        "criteria_columns": sorted_criteria_ids,
+        "conversations": conv_list,
     }
 
 
@@ -483,12 +510,26 @@ async def export_csv_on_demand(
         "rating", "cost", "termination_reason",
         "transcript_summary", "call_summary_title",
         "main_language", "tool_names",
-        "evaluation_criteria_results", "data_collection_results",
+        "data_collection_results",
         "month_partition",
     ]
 
-    # Add human-readable date column
-    header = ["data_rozmowy"] + fields
+    # Collect all criteria IDs for separate columns
+    all_criteria_ids = set()
+    parsed_criteria = {}
+    for c in conversations:
+        if c.evaluation_criteria_results:
+            try:
+                ecr = json.loads(c.evaluation_criteria_results)
+                if isinstance(ecr, dict):
+                    parsed_criteria[c.conversation_id] = ecr
+                    all_criteria_ids.update(ecr.keys())
+            except (json.JSONDecodeError, TypeError):
+                pass
+    sorted_criteria_ids = sorted(all_criteria_ids)
+
+    # Add human-readable date column + criteria columns
+    header = ["data_rozmowy"] + fields + [f"kryterium_{cid}" for cid in sorted_criteria_ids]
 
     suffix = f"_{month}" if month else "_all"
     filename = f"export_{aid[:12]}{suffix}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.csv"
@@ -502,8 +543,13 @@ async def export_csv_on_demand(
                 datetime.utcfromtimestamp(c.start_time_unix).strftime("%Y-%m-%d %H:%M:%S")
                 if c.start_time_unix else ""
             )
-            row = [date_str] + [getattr(c, field, "") or "" for field in fields]
-            writer.writerow(row)
+            base_row = [date_str] + [getattr(c, field, "") or "" for field in fields]
+            ecr = parsed_criteria.get(c.conversation_id, {})
+            criteria_row = []
+            for cid in sorted_criteria_ids:
+                crit = ecr.get(cid)
+                criteria_row.append(crit.get("result", "") if isinstance(crit, dict) else "")
+            writer.writerow(base_row + criteria_row)
 
     return FileResponse(
         filepath,

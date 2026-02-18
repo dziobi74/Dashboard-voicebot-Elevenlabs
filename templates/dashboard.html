@@ -409,8 +409,9 @@
                     <span id="refetchMsg" style="font-size:12px;"></span>
                 </div>
             </div>
+            <div style="overflow-x:auto;">
             <table>
-                <thead>
+                <thead id="conversationsHead">
                     <tr>
                         <th>Data</th>
                         <th>ID</th>
@@ -430,6 +431,7 @@
                 </thead>
                 <tbody id="conversationsBody"></tbody>
             </table>
+            </div>
             <div class="pagination" id="pagination"></div>
         </div>
     </div>
@@ -826,7 +828,30 @@ async function loadConversations(page = 1) {
     }
 }
 
+function criteriaResultBadge(result) {
+    if (!result) return '<span style="color:#636e72;font-size:11px;">—</span>';
+    if (result === 'success') return '<span style="color:#00b894;font-weight:600;font-size:11px;" title="success">&#10004;</span>';
+    if (result === 'failure') return '<span style="color:#e17055;font-weight:600;font-size:11px;" title="failure">&#10008;</span>';
+    return '<span style="color:#fdcb6e;font-size:11px;" title="' + result + '">?</span>';
+}
+
 function renderConversations(data) {
+    const critCols = data.criteria_columns || [];
+
+    // Dynamic header with criteria columns
+    const thead = document.getElementById('conversationsHead');
+    let headerHtml = `<tr>
+        <th>Data</th><th>ID</th><th>Źródło</th><th>Status</th><th>Wynik</th>
+        <th>Kierunek</th><th>Nr Voicebota</th><th>Nr Klienta</th>`;
+    critCols.forEach(cid => {
+        const label = cid.replace('id_', '').replace(/_/g, ' ');
+        headerHtml += `<th style="font-size:11px;white-space:nowrap;text-align:center;" title="${cid}">${label}</th>`;
+    });
+    headerHtml += `<th>Czas (s)</th><th>Wiadomości</th><th>Ocena</th><th>Koszt</th>
+        <th>Zakończenie</th><th>Podsumowanie</th></tr>`;
+    thead.innerHTML = headerHtml;
+
+    // Rows
     const body = document.getElementById('conversationsBody');
     body.innerHTML = data.conversations.map(c => {
         // Source badge
@@ -837,10 +862,16 @@ function renderConversations(data) {
         else if (src === 'react_sdk') srcBadge = '<span style="background:#636e72;color:#fff;padding:2px 6px;border-radius:4px;font-size:10px;">Web</span>';
         else if (src) srcBadge = `<span style="background:#2d3436;color:#ddd;padding:2px 6px;border-radius:4px;font-size:10px;">${src}</span>`;
 
-        // Phone display - show "web" indicator for react_sdk conversations
+        // Phone display
         const isWeb = (src === 'react_sdk');
         const agentPhone = c.agent_phone ? c.agent_phone : (isWeb ? '<span style="color:#636e72;font-size:10px;">— widget —</span>' : '-');
         const clientPhone = c.client_phone ? c.client_phone : (isWeb ? '<span style="color:#636e72;font-size:10px;">— widget —</span>' : '-');
+
+        // Criteria cells
+        const critCells = critCols.map(cid => {
+            const val = c.criteria ? c.criteria[cid] : null;
+            return `<td style="text-align:center;">${criteriaResultBadge(val)}</td>`;
+        }).join('');
 
         return `<tr>
             <td>${c.start_time ? new Date(c.start_time).toLocaleString('pl-PL') : '-'}</td>
@@ -851,6 +882,7 @@ function renderConversations(data) {
             <td>${c.direction || '-'}</td>
             <td style="font-family:monospace; font-size:12px; white-space:nowrap;">${agentPhone}</td>
             <td style="font-family:monospace; font-size:12px; white-space:nowrap;">${clientPhone}</td>
+            ${critCells}
             <td>${c.duration_secs || 0}</td>
             <td>${c.message_count || 0}</td>
             <td>${c.rating || '-'}</td>
