@@ -34,6 +34,37 @@ def set_setting(db: Session, key: str, value: str):
     db.commit()
 
 
+def get_agents(db: Session) -> list[dict]:
+    """Return configured agents as [{"id": "...", "name": "..."}, ...].
+
+    Handles backward-compatible migration from the old single ``agent_id``
+    setting.  If the new ``agents`` key exists it is used; otherwise the
+    legacy ``agent_id`` value is wrapped in a single-element list.
+    """
+    raw = get_setting(db, "agents")
+    if raw:
+        try:
+            agents = json.loads(raw)
+            if isinstance(agents, list) and agents:
+                return agents
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    # Fallback: migrate old single agent_id to new format
+    old_id = get_setting(db, "agent_id")
+    if old_id:
+        return [{"id": old_id, "name": old_id[:12]}]
+    return []
+
+
+def set_agents(db: Session, agents: list[dict]):
+    """Persist agents list as JSON in AppSettings."""
+    set_setting(db, "agents", json.dumps(agents, ensure_ascii=False))
+    # Keep legacy key pointing to first agent for edge-case fallback
+    if agents:
+        set_setting(db, "agent_id", agents[0]["id"])
+
+
 async def sync_conversations(
     agent_id: str,
     api_key: str,

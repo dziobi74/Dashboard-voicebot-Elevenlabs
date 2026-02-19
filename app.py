@@ -19,6 +19,7 @@ from pydantic import BaseModel
 from database import init_db, get_db, SessionLocal, AppSettings, Conversation, SyncLog, ArchiveLog
 from sync_service import (
     sync_conversations, compute_kpis, get_setting, set_setting,
+    get_agents, set_agents,
     check_and_archive, get_available_months, archive_month_to_csv,
     CSV_DIR,
 )
@@ -26,7 +27,7 @@ from sync_service import (
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Voicebot Dashboard", version="0.9.0")
+app = FastAPI(title="Voicebot Dashboard", version="1.0.0")
 
 TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), "templates")
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
@@ -56,29 +57,37 @@ async def shutdown():
 # ─── Scheduled Jobs ───────────────────────────────────────────────────
 
 async def scheduled_sync():
-    """Daily incremental sync: fetch from 1st of current month to now."""
+    """Daily incremental sync for ALL configured agents."""
     db = SessionLocal()
     try:
         api_key = get_setting(db, "api_key")
-        agent_id = get_setting(db, "agent_id")
-        if not api_key or not agent_id:
-            logger.warning("Scheduled sync skipped: API key or agent_id not configured")
+        agents = get_agents(db)
+        if not api_key or not agents:
+            logger.warning("Scheduled sync skipped: API key or agents not configured")
             return
 
         now = datetime.utcnow()
-        # Start from 1st day of current month
         first_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         start_unix = int(first_of_month.timestamp())
         end_unix = int(now.timestamp())
 
-        await sync_conversations(
-            agent_id=agent_id,
-            api_key=api_key,
-            start_unix=start_unix,
-            end_unix=end_unix,
-            sync_type="scheduled",
-        )
-        logger.info(f"Scheduled incremental sync completed ({first_of_month.strftime('%Y-%m-%d')} to {now.strftime('%Y-%m-%d %H:%M')})")
+        for agent in agents:
+            try:
+                await sync_conversations(
+                    agent_id=agent["id"],
+                    api_key=api_key,
+                    start_unix=start_unix,
+                    end_unix=end_unix,
+                    sync_type="scheduled",
+                )
+                logger.info(
+                    f"Scheduled sync completed for agent {agent.get('name', '')} "
+                    f"({agent['id'][:12]}) "
+                    f"({first_of_month.strftime('%Y-%m-%d')} to {now.strftime('%Y-%m-%d %H:%M')})"
+                )
+            except Exception as e:
+                logger.error(f"Scheduled sync failed for agent {agent.get('name', '')}: {e}")
+            await asyncio.sleep(2)  # rate-limit between agents
     except Exception as e:
         logger.error(f"Scheduled sync failed: {e}")
     finally:
@@ -98,9 +107,14 @@ async def scheduled_archive_check():
 
 # ─── Pydantic Models ─────────────────────────────────────────────────
 
+class AgentItem(BaseModel):
+    id: str
+    name: str
+
+
 class SettingsUpdate(BaseModel):
     api_key: str
-    agent_id: str
+    agents: list[AgentItem]
 
 
 class SyncRequest(BaseModel):
@@ -114,13 +128,15 @@ class SyncRequest(BaseModel):
 @app.get("/", response_class=HTMLResponse)
 async def dashboard_page(request: Request, db: Session = Depends(get_db)):
     api_key = get_setting(db, "api_key")
-    agent_id = get_setting(db, "agent_id")
-    configured = bool(api_key and agent_id)
-    months = get_available_months(db, agent_id) if agent_id else []
+    agents = get_agents(db)
+    configured = bool(api_key and agents)
+    first_agent_id = agents[0]["id"] if agents else None
+    months = get_available_months(db, first_agent_id) if first_agent_id else []
     return templates.TemplateResponse("dashboard.html", {
         "request": request,
         "configured": configured,
-        "agent_id": agent_id or "",
+        "agents": agents,
+        "agents_json": json.dumps(agents, ensure_ascii=False),
         "api_key_set": bool(api_key),
         "months": months,
     })
@@ -130,30 +146,40 @@ async def dashboard_page(request: Request, db: Session = Depends(get_db)):
 
 @app.post("/api/settings")
 async def update_settings(settings: SettingsUpdate, db: Session = Depends(get_db)):
+    if len(settings.agents) > 10:
+        raise HTTPException(400, "Maksymalnie 10 agentów")
+    if len(settings.agents) == 0:
+        raise HTTPException(400, "Podaj przynajmniej jednego agenta")
     set_setting(db, "api_key", settings.api_key)
-    set_setting(db, "agent_id", settings.agent_id)
-    return {"status": "ok", "message": "Settings saved"}
+    set_agents(db, [a.model_dump() for a in settings.agents])
+    return {"status": "ok", "message": "Zapisano ustawienia"}
 
 
 @app.get("/api/settings")
-async def get_settings(db: Session = Depends(get_db)):
+async def get_settings_endpoint(db: Session = Depends(get_db)):
     api_key = get_setting(db, "api_key")
-    agent_id = get_setting(db, "agent_id")
+    agents = get_agents(db)
     return {
         "api_key_set": bool(api_key),
         "api_key_masked": f"{api_key[:4]}...{api_key[-4:]}" if api_key and len(api_key) > 8 else "****",
-        "agent_id": agent_id or "",
+        "agents": agents,
     }
+
+
+@app.get("/api/agents")
+async def list_agents_endpoint(db: Session = Depends(get_db)):
+    return {"agents": get_agents(db)}
 
 
 @app.post("/api/sync")
 async def trigger_sync(req: SyncRequest, db: Session = Depends(get_db)):
     api_key = get_setting(db, "api_key")
-    agent_id = req.agent_id or get_setting(db, "agent_id")
     if not api_key:
-        raise HTTPException(400, "API key not configured")
-    if not agent_id:
-        raise HTTPException(400, "Agent ID not configured")
+        raise HTTPException(400, "API key nie skonfigurowany")
+
+    agents = get_agents(db)
+    if not agents:
+        raise HTTPException(400, "Brak skonfigurowanych agentów")
 
     start_unix = None
     end_unix = None
@@ -164,9 +190,15 @@ async def trigger_sync(req: SyncRequest, db: Session = Depends(get_db)):
             (datetime.strptime(req.end_date, "%Y-%m-%d") + timedelta(days=1)).timestamp()
         )
 
-    # Run sync in background
-    asyncio.create_task(_run_sync(agent_id, api_key, start_unix, end_unix))
-    return {"status": "started", "message": "Sync started in background"}
+    if req.agent_id:
+        # Sync single specified agent
+        asyncio.create_task(_run_sync(req.agent_id, api_key, start_unix, end_unix))
+        return {"status": "started", "message": f"Synchronizacja agenta uruchomiona", "agents_count": 1}
+    else:
+        # Sync ALL configured agents
+        for agent in agents:
+            asyncio.create_task(_run_sync(agent["id"], api_key, start_unix, end_unix))
+        return {"status": "started", "message": f"Synchronizacja {len(agents)} agentów uruchomiona", "agents_count": len(agents)}
 
 
 async def _run_sync(agent_id, api_key, start_unix, end_unix):
@@ -178,37 +210,30 @@ async def _run_sync(agent_id, api_key, start_unix, end_unix):
             end_unix=end_unix,
             sync_type="manual",
         )
-        logger.info(f"Manual sync completed: {result}")
+        logger.info(f"Manual sync completed for {agent_id[:12]}: {result}")
     except Exception as e:
-        logger.error(f"Manual sync failed: {e}")
+        logger.error(f"Manual sync failed for {agent_id[:12]}: {e}")
 
 
 @app.get("/api/kpis")
 async def get_kpis(
-    agent_id: Optional[str] = None,
+    agent_id: str = Query(..., description="Agent ID"),
     month: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
-    aid = agent_id or get_setting(db, "agent_id")
-    if not aid:
-        raise HTTPException(400, "Agent ID not configured")
-    kpis = compute_kpis(db, aid, month)
+    kpis = compute_kpis(db, agent_id, month)
     return kpis
 
 
 @app.get("/api/conversations")
 async def list_conversations(
-    agent_id: Optional[str] = None,
+    agent_id: str = Query(..., description="Agent ID"),
     month: Optional[str] = None,
     page: int = 1,
     per_page: int = 50,
     db: Session = Depends(get_db),
 ):
-    aid = agent_id or get_setting(db, "agent_id")
-    if not aid:
-        raise HTTPException(400, "Agent ID not configured")
-
-    query = db.query(Conversation).filter(Conversation.agent_id == aid)
+    query = db.query(Conversation).filter(Conversation.agent_id == agent_id)
     if month:
         query = query.filter(Conversation.month_partition == month)
     query = query.order_by(Conversation.start_time_unix.desc())
@@ -272,7 +297,7 @@ async def list_conversations(
 
 @app.get("/api/sync-logs")
 async def list_sync_logs(db: Session = Depends(get_db)):
-    logs = db.query(SyncLog).order_by(SyncLog.started_at.desc()).limit(20).all()
+    logs = db.query(SyncLog).order_by(SyncLog.started_at.desc()).limit(50).all()
     return [
         {
             "id": l.id,
@@ -290,21 +315,22 @@ async def list_sync_logs(db: Session = Depends(get_db)):
 
 
 @app.get("/api/months")
-async def list_months(agent_id: Optional[str] = None, db: Session = Depends(get_db)):
-    aid = agent_id or get_setting(db, "agent_id")
-    if not aid:
-        return {"months": []}
-    return {"months": get_available_months(db, aid)}
+async def list_months(
+    agent_id: str = Query(..., description="Agent ID"),
+    db: Session = Depends(get_db),
+):
+    return {"months": get_available_months(db, agent_id)}
 
 
 @app.post("/api/archive")
-async def trigger_archive(month: str = Query(...), db: Session = Depends(get_db)):
-    agent_id = get_setting(db, "agent_id")
-    if not agent_id:
-        raise HTTPException(400, "Agent ID not configured")
+async def trigger_archive(
+    month: str = Query(...),
+    agent_id: str = Query(..., description="Agent ID"),
+    db: Session = Depends(get_db),
+):
     filepath = archive_month_to_csv(db, agent_id, month)
     if not filepath:
-        raise HTTPException(404, "No conversations found for that month")
+        raise HTTPException(404, "Brak konwersacji dla tego miesiąca i agenta")
     return {"status": "ok", "file": filepath}
 
 
@@ -325,12 +351,14 @@ async def list_archives(db: Session = Depends(get_db)):
 
 
 @app.post("/api/refetch-details")
-async def refetch_details(db: Session = Depends(get_db)):
+async def refetch_details(
+    agent_id: str = Query(..., description="Agent ID"),
+    db: Session = Depends(get_db),
+):
     """Reset details_fetched flag for conversations missing phone numbers, so next sync re-fetches them."""
     api_key = get_setting(db, "api_key")
-    agent_id = get_setting(db, "agent_id")
-    if not api_key or not agent_id:
-        raise HTTPException(400, "API key or Agent ID not configured")
+    if not api_key:
+        raise HTTPException(400, "API key nie skonfigurowany")
 
     # Reset details_fetched for conversations that have no phone numbers
     updated = (
@@ -364,6 +392,7 @@ async def download_csv(archive_id: int, db: Session = Depends(get_db)):
 
 @app.get("/api/debug-metadata")
 async def debug_metadata(
+    agent_id: str = Query(..., description="Agent ID"),
     conversation_id: Optional[str] = None,
     limit: int = 5,
     db: Session = Depends(get_db),
@@ -377,9 +406,8 @@ async def debug_metadata(
     from elevenlabs_client import ElevenLabsClient
 
     api_key = get_setting(db, "api_key")
-    agent_id = get_setting(db, "agent_id")
-    if not api_key or not agent_id:
-        raise HTTPException(400, "API key or Agent ID not configured")
+    if not api_key:
+        raise HTTPException(400, "API key nie skonfigurowany")
 
     client = ElevenLabsClient(api_key)
 
@@ -481,7 +509,7 @@ async def debug_metadata(
 
 @app.get("/api/export-csv")
 async def export_csv_on_demand(
-    agent_id: Optional[str] = None,
+    agent_id: str = Query(..., description="Agent ID"),
     month: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
@@ -490,11 +518,7 @@ async def export_csv_on_demand(
     import io
     import tempfile
 
-    aid = agent_id or get_setting(db, "agent_id")
-    if not aid:
-        raise HTTPException(400, "Agent ID not configured")
-
-    query = db.query(Conversation).filter(Conversation.agent_id == aid)
+    query = db.query(Conversation).filter(Conversation.agent_id == agent_id)
     if month:
         query = query.filter(Conversation.month_partition == month)
     query = query.order_by(Conversation.start_time_unix.desc())
@@ -532,7 +556,7 @@ async def export_csv_on_demand(
     header = ["data_rozmowy"] + fields + [f"kryterium_{cid}" for cid in sorted_criteria_ids]
 
     suffix = f"_{month}" if month else "_all"
-    filename = f"export_{aid[:12]}{suffix}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.csv"
+    filename = f"export_{agent_id[:12]}{suffix}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.csv"
     filepath = os.path.join(CSV_DIR, filename)
 
     with open(filepath, "w", newline="", encoding="utf-8-sig") as f:

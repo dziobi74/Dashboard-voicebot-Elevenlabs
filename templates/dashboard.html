@@ -272,6 +272,23 @@
         .criteria-bar-fill { height: 100%; background: var(--green); border-radius: 3px; }
         .criteria-stats { font-size: 11px; color: var(--text-dim); }
 
+        /* Agent editor row */
+        .agent-row {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+        .agent-row input {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 8px 12px;
+            color: var(--text);
+            font-size: 13px;
+        }
+        .agent-row input:focus { outline: none; border-color: var(--accent); }
+
         @media (max-width: 900px) {
             .settings-grid { grid-template-columns: 1fr; }
             .charts-grid { grid-template-columns: 1fr; }
@@ -282,7 +299,7 @@
 <body>
 
 <div class="header">
-    <h1><span>Voicebot</span> Dashboard</h1>
+    <h1><span>Voicebot</span> Dashboard <span style="font-size:12px; color:var(--text-dim); font-weight:400;">v1.0</span></h1>
     <div style="display:flex; gap:12px; align-items:center;">
         <span style="font-size:11px; color:var(--text-dim); margin-right:8px;">Autor: Robert Małek</span>
         <span id="schedulerStatus" style="font-size:12px; color:var(--text-dim);">
@@ -297,25 +314,43 @@
     <!-- Settings Panel -->
     <div class="settings-panel" id="settingsPanel" style="display: {{ 'block' if not configured else 'none' }};">
         <h2>Konfiguracja API</h2>
-        <div class="settings-grid">
-            <div class="form-group">
-                <label>ElevenLabs API Key</label>
-                <input type="password" id="apiKeyInput" placeholder="xi-..." value="">
-            </div>
-            <div class="form-group">
-                <label>Agent ID</label>
-                <input type="text" id="agentIdInput" placeholder="np. abc123..." value="{{ agent_id }}">
-            </div>
-            <div class="form-group">
-                <label>&nbsp;</label>
-                <button class="btn btn-primary" onclick="saveSettings()">Zapisz</button>
-            </div>
+
+        <div class="form-group" style="margin-bottom:20px; max-width:500px;">
+            <label>ElevenLabs API Key (wspólny dla wszystkich agentów)</label>
+            <input type="password" id="apiKeyInput" placeholder="xi-..." value="">
+        </div>
+
+        <h3 style="font-size:14px; color:var(--accent2); margin-bottom:12px;">
+            Agenci (maks. 10)
+        </h3>
+        <div id="agentsListEditor"></div>
+        <button class="btn btn-sm btn-secondary" onclick="addAgentRow()" style="margin-top:8px;" id="addAgentBtn">+ Dodaj agenta</button>
+
+        <div style="margin-top:20px;">
+            <button class="btn btn-primary" onclick="saveSettings()">Zapisz ustawienia</button>
         </div>
         <div id="settingsMsg" style="margin-top:12px; font-size:13px;"></div>
     </div>
 
     <!-- Controls -->
     <div class="controls">
+        <div class="form-group">
+            <label>Agent</label>
+            <select id="agentSelect" onchange="onAgentChanged()" style="min-width:220px; font-weight:600;">
+                {% for a in agents %}
+                <option value="{{ a.id }}">{{ a.name }} ({{ a.id[:8] }}...)</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Miesiąc</label>
+            <select id="monthSelect" onchange="onMonthChanged()">
+                <option value="">Wszystkie</option>
+                {% for m in months %}
+                <option value="{{ m }}">{{ m }}</option>
+                {% endfor %}
+            </select>
+        </div>
         <div class="form-group">
             <label>Okres od</label>
             <input type="date" id="dateFrom">
@@ -325,25 +360,12 @@
             <input type="date" id="dateTo">
         </div>
         <div class="form-group">
-            <label>Miesiąc</label>
-            <select id="monthSelect">
-                <option value="">Wszystkie</option>
-                {% for m in months %}
-                <option value="{{ m }}">{{ m }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="form-group">
             <label>&nbsp;</label>
             <button class="btn btn-primary" onclick="triggerSync()">Pobierz dane</button>
         </div>
         <div class="form-group">
             <label>&nbsp;</label>
             <button class="btn btn-secondary" onclick="loadKPIs()">Odśwież KPI</button>
-        </div>
-        <div class="form-group">
-            <label>&nbsp;</label>
-            <button class="btn btn-secondary" onclick="switchTab('archives', document.querySelector('[data-tab=archives]'))">Archiwizuj CSV</button>
         </div>
         <div id="syncStatus" class="sync-status"></div>
     </div>
@@ -512,6 +534,9 @@
 let currentKPIs = null;
 let charts = {};
 let currentPage = 1;
+let agents = {{ agents_json | safe }};
+let selectedAgentId = agents.length > 0 ? agents[0].id : null;
+let activeTab = 'dashboard';
 
 // ─── Settings ───────────────────────────────────────
 function toggleSettings() {
@@ -519,23 +544,73 @@ function toggleSettings() {
     panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
 }
 
+function renderAgentsEditor() {
+    const container = document.getElementById('agentsListEditor');
+    let html = '';
+    for (let i = 0; i < agents.length; i++) {
+        const a = agents[i];
+        html += `<div class="agent-row">
+            <input type="text" value="${a.id || ''}" placeholder="Agent ID (np. abc123...)"
+                   style="width:320px; font-family:monospace;"
+                   onchange="agents[${i}].id=this.value" />
+            <input type="text" value="${a.name || ''}" placeholder="Nazwa / etykieta"
+                   style="width:220px;"
+                   onchange="agents[${i}].name=this.value" />
+            <button class="btn btn-sm" style="background:var(--red);color:#fff;"
+                    onclick="removeAgentRow(${i})">Usuń</button>
+        </div>`;
+    }
+    container.innerHTML = html;
+    updateAddButton();
+}
+
+function addAgentRow() {
+    if (agents.length >= 10) return;
+    agents.push({id: '', name: ''});
+    renderAgentsEditor();
+}
+
+function removeAgentRow(index) {
+    agents.splice(index, 1);
+    renderAgentsEditor();
+}
+
+function updateAddButton() {
+    const btn = document.getElementById('addAgentBtn');
+    if (btn) {
+        btn.disabled = agents.length >= 10;
+        btn.textContent = agents.length >= 10 ? 'Maksymalnie 10 agentów' : '+ Dodaj agenta';
+    }
+}
+
 async function saveSettings() {
     const apiKey = document.getElementById('apiKeyInput').value.trim();
-    const agentId = document.getElementById('agentIdInput').value.trim();
-    if (!apiKey || !agentId) {
-        showMsg('settingsMsg', 'Podaj API Key i Agent ID', 'var(--red)');
+    const validAgents = agents.filter(a => a.id && a.id.trim());
+    if (!apiKey || validAgents.length === 0) {
+        showMsg('settingsMsg', 'Podaj API Key i przynajmniej jednego agenta', 'var(--red)');
         return;
     }
-    const resp = await fetch('/api/settings', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({api_key: apiKey, agent_id: agentId}),
-    });
-    if (resp.ok) {
-        showMsg('settingsMsg', 'Zapisano!', 'var(--green)');
-        setTimeout(() => location.reload(), 1000);
-    } else {
-        showMsg('settingsMsg', 'Błąd zapisu', 'var(--red)');
+    if (validAgents.length > 10) {
+        showMsg('settingsMsg', 'Maksymalnie 10 agentów', 'var(--red)');
+        return;
+    }
+    // Trim whitespace
+    validAgents.forEach(a => { a.id = a.id.trim(); a.name = a.name.trim() || a.id.substring(0, 12); });
+    try {
+        const resp = await fetch('/api/settings', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({api_key: apiKey, agents: validAgents}),
+        });
+        if (resp.ok) {
+            showMsg('settingsMsg', 'Zapisano!', 'var(--green)');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            const data = await resp.json();
+            showMsg('settingsMsg', 'Błąd: ' + (data.detail || 'nieznany'), 'var(--red)');
+        }
+    } catch (e) {
+        showMsg('settingsMsg', 'Błąd: ' + e.message, 'var(--red)');
     }
 }
 
@@ -545,12 +620,31 @@ function showMsg(id, text, color) {
     el.style.color = color;
 }
 
+// ─── Agent Changed ──────────────────────────────────
+async function onAgentChanged() {
+    selectedAgentId = document.getElementById('agentSelect').value;
+    await refreshMonths();
+    await reloadCurrentTab();
+}
+
+async function onMonthChanged() {
+    await reloadCurrentTab();
+}
+
+async function reloadCurrentTab() {
+    if (activeTab === 'dashboard' || activeTab === 'criteria') await loadKPIs();
+    else if (activeTab === 'table') await loadConversations();
+    else if (activeTab === 'logs') await loadSyncLogs();
+    else if (activeTab === 'archives') await loadArchives();
+}
+
 // ─── Tabs ───────────────────────────────────────────
 function switchTab(name, btn) {
     document.querySelectorAll('[id^="tab-"]').forEach(el => el.classList.add('hidden'));
     document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
     document.getElementById('tab-' + name).classList.remove('hidden');
     btn.classList.add('active');
+    activeTab = name;
 
     if (name === 'table') loadConversations();
     if (name === 'logs') loadSyncLogs();
@@ -576,14 +670,15 @@ async function triggerSync() {
             body: JSON.stringify(body),
         });
         const data = await resp.json();
-        status.innerHTML = '<span class="status-dot status-ok"></span> ' + (data.message || 'Synchronizacja uruchomiona');
+        const agentsCount = data.agents_count || 1;
+        status.innerHTML = '<span class="status-dot status-running"></span> ' + data.message;
 
         // Poll for completion
         setTimeout(async () => {
-            await loadKPIs();
             await refreshMonths();
-            status.innerHTML = '<span class="status-dot status-ok"></span> Dane załadowane. Odśwież KPI.';
-        }, 5000);
+            await loadKPIs();
+            status.innerHTML = '<span class="status-dot status-ok"></span> Dane załadowane (' + agentsCount + ' agentów).';
+        }, 5000 + (agentsCount * 2000));
     } catch (e) {
         status.innerHTML = '<span style="color:var(--red)">Błąd: ' + e.message + '</span>';
     }
@@ -591,8 +686,9 @@ async function triggerSync() {
 
 // ─── KPIs ───────────────────────────────────────────
 async function loadKPIs() {
+    if (!selectedAgentId) return;
     const month = document.getElementById('monthSelect').value;
-    const params = new URLSearchParams();
+    const params = new URLSearchParams({agent_id: selectedAgentId});
     if (month) params.set('month', month);
 
     try {
@@ -695,99 +791,51 @@ function renderCharts(k) {
         },
     };
 
-    // Conversion pie
     charts.conversion = new Chart(document.getElementById('chartConversion'), {
         type: 'doughnut',
         data: {
             labels: ['Sukces', 'Porażka', 'Brak danych'],
-            datasets: [{
-                data: [k.successful_count, k.failed_count, k.unknown_count],
-                backgroundColor: ['#00b894', '#e17055', '#636e72'],
-                borderWidth: 0,
-            }],
+            datasets: [{ data: [k.successful_count, k.failed_count, k.unknown_count], backgroundColor: ['#00b894', '#e17055', '#636e72'], borderWidth: 0 }],
         },
-        options: {
-            responsive: true,
-            plugins: {
-                legend: { position: 'bottom', labels: { color: '#8b8fa3', padding: 16 } },
-            },
-        },
+        options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { color: '#8b8fa3', padding: 16 } } } },
     });
 
-    // Direction pie
     charts.direction = new Chart(document.getElementById('chartDirection'), {
         type: 'doughnut',
         data: {
             labels: ['Przychodzące', 'Wychodzące'],
-            datasets: [{
-                data: [k.inbound_calls, k.outbound_calls],
-                backgroundColor: ['#74b9ff', '#a29bfe'],
-                borderWidth: 0,
-            }],
+            datasets: [{ data: [k.inbound_calls, k.outbound_calls], backgroundColor: ['#74b9ff', '#a29bfe'], borderWidth: 0 }],
         },
-        options: {
-            responsive: true,
-            plugins: { legend: { position: 'bottom', labels: { color: '#8b8fa3', padding: 16 } } },
-        },
+        options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { color: '#8b8fa3', padding: 16 } } } },
     });
 
     const trends = k.daily_trends || [];
     const labels = trends.map(t => t.date);
 
-    // Daily total
     charts.dailyTotal = new Chart(document.getElementById('chartDailyTotal'), {
         type: 'bar',
-        data: {
-            labels,
-            datasets: [{ label: 'Rozmowy', data: trends.map(t => t.total), backgroundColor: '#6c5ce7' }],
-        },
+        data: { labels, datasets: [{ label: 'Rozmowy', data: trends.map(t => t.total), backgroundColor: '#6c5ce7' }] },
         options: chartOpts,
     });
 
-    // Daily duration
     charts.dailyDuration = new Chart(document.getElementById('chartDailyDuration'), {
         type: 'line',
-        data: {
-            labels,
-            datasets: [{
-                label: 'Śr. czas (s)',
-                data: trends.map(t => t.avg_duration),
-                borderColor: '#fdcb6e',
-                backgroundColor: 'rgba(253,203,110,0.1)',
-                fill: true,
-                tension: 0.3,
-            }],
-        },
+        data: { labels, datasets: [{ label: 'Śr. czas (s)', data: trends.map(t => t.avg_duration), borderColor: '#fdcb6e', backgroundColor: 'rgba(253,203,110,0.1)', fill: true, tension: 0.3 }] },
         options: chartOpts,
     });
 
-    // Daily success/fail
     charts.dailySuccess = new Chart(document.getElementById('chartDailySuccess'), {
         type: 'bar',
-        data: {
-            labels,
-            datasets: [
-                { label: 'Sukces', data: trends.map(t => t.success), backgroundColor: '#00b894' },
-                { label: 'Porażka', data: trends.map(t => t.failed), backgroundColor: '#e17055' },
-            ],
-        },
+        data: { labels, datasets: [
+            { label: 'Sukces', data: trends.map(t => t.success), backgroundColor: '#00b894' },
+            { label: 'Porażka', data: trends.map(t => t.failed), backgroundColor: '#e17055' },
+        ]},
         options: { ...chartOpts, scales: { ...chartOpts.scales, x: { ...chartOpts.scales.x, stacked: true }, y: { ...chartOpts.scales.y, stacked: true } } },
     });
 
-    // Daily cost
     charts.dailyCost = new Chart(document.getElementById('chartDailyCost'), {
         type: 'line',
-        data: {
-            labels,
-            datasets: [{
-                label: 'Koszt',
-                data: trends.map(t => t.cost),
-                borderColor: '#e17055',
-                backgroundColor: 'rgba(225,112,85,0.1)',
-                fill: true,
-                tension: 0.3,
-            }],
-        },
+        data: { labels, datasets: [{ label: 'Koszt', data: trends.map(t => t.cost), borderColor: '#e17055', backgroundColor: 'rgba(225,112,85,0.1)', fill: true, tension: 0.3 }] },
         options: chartOpts,
     });
 }
@@ -813,9 +861,10 @@ function renderCriteria(stats) {
 
 // ─── Conversations Table ────────────────────────────
 async function loadConversations(page = 1) {
+    if (!selectedAgentId) return;
     currentPage = page;
     const month = document.getElementById('monthSelect').value;
-    const params = new URLSearchParams({ page, per_page: 50 });
+    const params = new URLSearchParams({ agent_id: selectedAgentId, page, per_page: 50 });
     if (month) params.set('month', month);
 
     try {
@@ -838,7 +887,6 @@ function criteriaResultBadge(result) {
 function renderConversations(data) {
     const critCols = data.criteria_columns || [];
 
-    // Dynamic header with criteria columns
     const thead = document.getElementById('conversationsHead');
     let headerHtml = `<tr>
         <th>Data</th><th>ID</th><th>Źródło</th><th>Status</th><th>Wynik</th>
@@ -851,10 +899,8 @@ function renderConversations(data) {
         <th>Zakończenie</th><th>Podsumowanie</th></tr>`;
     thead.innerHTML = headerHtml;
 
-    // Rows
     const body = document.getElementById('conversationsBody');
     body.innerHTML = data.conversations.map(c => {
-        // Source badge
         const src = c.conversation_source || '';
         let srcBadge = '-';
         if (src === 'twilio') srcBadge = '<span style="background:#6c5ce7;color:#fff;padding:2px 6px;border-radius:4px;font-size:10px;">Twilio</span>';
@@ -862,12 +908,10 @@ function renderConversations(data) {
         else if (src === 'react_sdk') srcBadge = '<span style="background:#636e72;color:#fff;padding:2px 6px;border-radius:4px;font-size:10px;">Web</span>';
         else if (src) srcBadge = `<span style="background:#2d3436;color:#ddd;padding:2px 6px;border-radius:4px;font-size:10px;">${src}</span>`;
 
-        // Phone display
         const isWeb = (src === 'react_sdk');
         const agentPhone = c.agent_phone ? c.agent_phone : (isWeb ? '<span style="color:#636e72;font-size:10px;">— widget —</span>' : '-');
         const clientPhone = c.client_phone ? c.client_phone : (isWeb ? '<span style="color:#636e72;font-size:10px;">— widget —</span>' : '-');
 
-        // Criteria cells
         const critCells = critCols.map(cid => {
             const val = c.criteria ? c.criteria[cid] : null;
             return `<td style="text-align:center;">${criteriaResultBadge(val)}</td>`;
@@ -893,7 +937,6 @@ function renderConversations(data) {
         </tr>`;
     }).join('');
 
-    // Pagination
     const totalPages = Math.ceil(data.total / data.per_page);
     const pag = document.getElementById('pagination');
     let html = '';
@@ -931,9 +974,7 @@ async function loadSyncLogs() {
 
 // ─── Archives ───────────────────────────────────────
 async function loadArchives() {
-    // Load archive month selector
     await loadArchiveMonths();
-    // Load existing archives list
     try {
         const resp = await fetch('/api/archives');
         const archives = await resp.json();
@@ -958,8 +999,9 @@ async function loadArchives() {
 }
 
 async function loadArchiveMonths() {
+    if (!selectedAgentId) return;
     try {
-        const resp = await fetch('/api/months');
+        const resp = await fetch('/api/months?agent_id=' + selectedAgentId);
         const data = await resp.json();
         const sel = document.getElementById('archiveMonthSelect');
         sel.innerHTML = '<option value="">-- wybierz miesiąc --</option>';
@@ -980,12 +1022,12 @@ async function archiveSelectedMonth() {
     msgEl.innerHTML = '<span class="spinner"></span> Archiwizuję...';
     msgEl.style.color = 'var(--text)';
     try {
-        const resp = await fetch('/api/archive?month=' + month, { method: 'POST' });
+        const resp = await fetch('/api/archive?month=' + month + '&agent_id=' + selectedAgentId, { method: 'POST' });
         const data = await resp.json();
         if (resp.ok) {
             msgEl.textContent = 'Zarchiwizowano miesiąc ' + month + '.';
             msgEl.style.color = 'var(--green)';
-            await loadArchives(); // reload table
+            await loadArchives();
         } else {
             msgEl.textContent = 'Błąd: ' + (data.detail || 'nieznany');
             msgEl.style.color = 'var(--red)';
@@ -996,31 +1038,10 @@ async function archiveSelectedMonth() {
     }
 }
 
-// Keep old function for backwards compat with top bar button
-async function archiveMonth() {
-    const month = document.getElementById('monthSelect').value;
-    if (!month) {
-        // Switch to archives tab instead
-        const archBtn = document.querySelector('[data-tab="archives"]');
-        switchTab('archives', archBtn);
-        return;
-    }
-    try {
-        const resp = await fetch('/api/archive?month=' + month, { method: 'POST' });
-        const data = await resp.json();
-        if (resp.ok) {
-            alert('Zarchiwizowano miesiąc ' + month);
-        } else {
-            alert('Błąd: ' + (data.detail || 'nieznany'));
-        }
-    } catch (e) {
-        alert('Błąd: ' + e.message);
-    }
-}
-
 async function refreshMonths() {
+    if (!selectedAgentId) return;
     try {
-        const resp = await fetch('/api/months');
+        const resp = await fetch('/api/months?agent_id=' + selectedAgentId);
         const data = await resp.json();
         const sel = document.getElementById('monthSelect');
         const current = sel.value;
@@ -1033,16 +1054,16 @@ async function refreshMonths() {
 
 // ─── Refetch phone numbers ───────────────────────────
 async function refetchPhones() {
+    if (!selectedAgentId) return;
     const msg = document.getElementById('refetchMsg');
     msg.innerHTML = '<span class="spinner"></span>';
     msg.style.color = 'var(--text)';
     try {
-        const resp = await fetch('/api/refetch-details', { method: 'POST' });
+        const resp = await fetch('/api/refetch-details?agent_id=' + selectedAgentId, { method: 'POST' });
         const data = await resp.json();
         if (resp.ok) {
             msg.textContent = data.message;
             msg.style.color = 'var(--green)';
-            // Reload table after some time for details to be fetched
             setTimeout(() => { loadConversations(currentPage); msg.textContent = ''; }, 8000);
         } else {
             msg.textContent = data.detail || 'Błąd';
@@ -1056,23 +1077,23 @@ async function refetchPhones() {
 
 // ─── Debug metadata (diagnostyka JSON) ──────────────
 async function debugMetadata() {
+    if (!selectedAgentId) return;
     const msg = document.getElementById('refetchMsg');
     msg.innerHTML = '<span class="spinner"></span> Analizuję strukturę JSON...';
     msg.style.color = 'var(--yellow)';
     try {
-        const resp = await fetch('/api/debug-metadata?limit=5');
+        const resp = await fetch('/api/debug-metadata?agent_id=' + selectedAgentId + '&limit=5');
         const data = await resp.json();
         if (!resp.ok) {
             msg.textContent = data.detail || 'Błąd';
             msg.style.color = 'var(--red)';
             return;
         }
-        // Display results in a modal/overlay
         let html = '<div style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.85);z-index:9999;overflow:auto;padding:40px;">';
         html += '<div style="max-width:1200px;margin:0 auto;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;">';
         html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">';
-        html += '<h2 style="color:var(--accent2);">🔍 Diagnostyka struktury JSON z ElevenLabs API</h2>';
-        html += '<button onclick="this.closest(\'div[style*=fixed]\').remove()" class="btn btn-sm" style="background:var(--red);">✕ Zamknij</button></div>';
+        html += '<h2 style="color:var(--accent2);">Diagnostyka struktury JSON z ElevenLabs API</h2>';
+        html += '<button onclick="this.closest(\'div[style*=fixed]\').remove()" class="btn btn-sm" style="background:var(--red);">Zamknij</button></div>';
 
         for (const diag of data.diagnostics) {
             html += `<div style="border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:16px;">`;
@@ -1096,17 +1117,14 @@ async function debugMetadata() {
                     html += `<p style="color:var(--red);"><strong>Brak numerów telefonów w odpowiedzi JSON!</strong></p>`;
                 }
 
-                // Show raw metadata.body
-                html += '<details><summary style="cursor:pointer;color:var(--accent2);margin-top:8px;">📋 metadata.body (surowe dane)</summary>';
+                html += '<details><summary style="cursor:pointer;color:var(--accent2);margin-top:8px;">metadata.body (surowe dane)</summary>';
                 html += `<pre style="background:var(--bg);padding:8px;border-radius:4px;font-size:11px;overflow:auto;max-height:300px;">${JSON.stringify(diag.metadata_body_raw, null, 2)}</pre></details>`;
 
-                // Show full metadata
-                html += '<details><summary style="cursor:pointer;color:var(--accent2);margin-top:8px;">📋 Pełne metadata (surowe dane)</summary>';
+                html += '<details><summary style="cursor:pointer;color:var(--accent2);margin-top:8px;">Pełne metadata (surowe dane)</summary>';
                 html += `<pre style="background:var(--bg);padding:8px;border-radius:4px;font-size:11px;overflow:auto;max-height:400px;">${JSON.stringify(diag.full_metadata_raw, null, 2)}</pre></details>`;
 
-                // Show CICD / dynamic variables
                 if (diag.cicd_dynamic_variables) {
-                    html += '<details><summary style="cursor:pointer;color:var(--accent2);margin-top:8px;">📋 dynamic_variables</summary>';
+                    html += '<details><summary style="cursor:pointer;color:var(--accent2);margin-top:8px;">dynamic_variables</summary>';
                     html += `<pre style="background:var(--bg);padding:8px;border-radius:4px;font-size:11px;overflow:auto;max-height:200px;">${JSON.stringify(diag.cicd_dynamic_variables, null, 2)}</pre></details>`;
                 }
             }
@@ -1125,16 +1143,19 @@ async function debugMetadata() {
 
 // ─── Export CSV on demand ────────────────────────────
 function exportCSV() {
+    if (!selectedAgentId) return;
     const month = document.getElementById('monthSelect').value;
-    const params = new URLSearchParams();
+    const params = new URLSearchParams({agent_id: selectedAgentId});
     if (month) params.set('month', month);
     window.open('/api/export-csv?' + params.toString(), '_blank');
 }
 
 // ─── Init ───────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-    loadKPIs();
-    // Default: from 1st of current month to today
+    renderAgentsEditor();
+    if (selectedAgentId) {
+        loadKPIs();
+    }
     const today = new Date();
     const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
     document.getElementById('dateTo').value = today.toISOString().split('T')[0];

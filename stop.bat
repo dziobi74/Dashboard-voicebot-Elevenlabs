@@ -21,7 +21,7 @@ if %FOUND%==0 (
     echo  Dashboard nie jest uruchomiony.
 ) else (
     echo.
-    echo  ✓ Dashboard zatrzymany pomyslnie.
+    echo  [OK] Dashboard zatrzymany pomyslnie.
 )
 
 echo.

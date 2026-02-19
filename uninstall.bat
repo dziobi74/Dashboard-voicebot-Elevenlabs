@@ -5,18 +5,18 @@ title Voicebot Dashboard - Deinstalacja
 cd /d "%~dp0"
 
 echo.
-echo  ╔══════════════════════════════════════════════════╗
-echo  ║       VOICEBOT DASHBOARD - DEINSTALACJA          ║
-echo  ╚══════════════════════════════════════════════════╝
+echo  ========================================================
+echo       VOICEBOT DASHBOARD - DEINSTALACJA
+echo  ========================================================
 echo.
 echo  Ta operacja usunie:
-echo    • Srodowisko wirtualne (venv)
-echo    • Skrot z pulpitu
+echo    - Srodowisko wirtualne (venv)
+echo    - Skrot z pulpitu
 echo.
 echo  NIE zostana usuniete:
-echo    • Baza danych (voicebot.db) - Twoje dane
-echo    • Archiwa CSV (csv_archives/)
-echo    • Pliki zrodlowe aplikacji
+echo    - Baza danych (voicebot.db) - Twoje dane
+echo    - Archiwa CSV (csv_archives/)
+echo    - Pliki zrodlowe aplikacji
 echo.
 
 set /p CONFIRM="Czy na pewno chcesz kontynuowac? (t/N): "
@@ -54,13 +54,15 @@ if exist "%USERPROFILE%\Desktop\Voicebot Dashboard.lnk" (
 )
 
 echo.
-echo  ╔══════════════════════════════════════════════════╗
-echo  ║  ✓ Deinstalacja zakonczona                      ║
-echo  ║                                                  ║
-echo  ║  Baza danych i archiwa CSV zostaly zachowane.   ║
-echo  ║  Aby je usunac, zrob to recznie.                ║
-echo  ║                                                  ║
-echo  ║  Aby zainstalowac ponownie: install.bat         ║
-echo  ╚══════════════════════════════════════════════════╝
+echo  ========================================================
+echo.
+echo   [OK] Deinstalacja zakonczona
+echo.
+echo   Baza danych i archiwa CSV zostaly zachowane.
+echo   Aby je usunac, zrob to recznie.
+echo.
+echo   Aby zainstalowac ponownie: install.bat
+echo.
+echo  ========================================================
 echo.
 pause

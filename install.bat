@@ -1,13 +1,13 @@
 @echo off
 chcp 65001 >nul 2>&1
 setlocal EnableDelayedExpansion
-title Voicebot Dashboard - Instalator v0.9
+title Voicebot Dashboard - Instalator v1.0
 
 echo.
-echo  ╔══════════════════════════════════════════════════════╗
-echo  ║       VOICEBOT DASHBOARD - INSTALATOR v0.9          ║
-echo  ║       ElevenLabs Conversational AI Analytics         ║
-echo  ╚══════════════════════════════════════════════════════╝
+echo  ========================================================
+echo       VOICEBOT DASHBOARD - INSTALATOR v1.0
+echo       ElevenLabs Conversational AI Analytics
+echo  ========================================================
 echo.
 
 cd /d "%~dp0"
@@ -20,12 +20,12 @@ echo [1/6] Sprawdzanie Pythona...
 where python >nul 2>&1
 if errorlevel 1 (
     echo.
-    echo  ╔══════════════════════════════════════════════════╗
-    echo  ║  BŁĄD: Python nie jest zainstalowany!           ║
-    echo  ║                                                  ║
-    echo  ║  Pobierz z: https://www.python.org/downloads/   ║
-    echo  ║  Zaznacz "Add Python to PATH" przy instalacji!  ║
-    echo  ╚══════════════════════════════════════════════════╝
+    echo  ========================================================
+    echo   BLAD: Python nie jest zainstalowany!
+    echo.
+    echo   Pobierz z: https://www.python.org/downloads/
+    echo   WAZNE: Zaznacz "Add Python to PATH" przy instalacji!
+    echo  ========================================================
     echo.
     pause
     exit /b 1
@@ -39,18 +39,18 @@ for /f "tokens=1,2 delims=." %%a in ("%PYVER%") do (
     set PYMINOR=%%b
 )
 if %PYMAJOR% LSS 3 (
-    echo  BŁĄD: Wymagany Python 3.10+. Zainstalowany: %PYVER%
+    echo  BLAD: Wymagany Python 3.10+. Zainstalowany: %PYVER%
     pause
     exit /b 1
 )
 if %PYMAJOR%==3 if %PYMINOR% LSS 10 (
-    echo  BŁĄD: Wymagany Python 3.10+. Zainstalowany: %PYVER%
+    echo  BLAD: Wymagany Python 3.10+. Zainstalowany: %PYVER%
     pause
     exit /b 1
 )
 
 :: =========================================================
-:: 2. Tworzenie środowiska wirtualnego
+:: 2. Tworzenie srodowiska wirtualnego
 :: =========================================================
 echo.
 echo [2/6] Tworzenie srodowiska wirtualnego...
@@ -60,7 +60,7 @@ if exist "venv" (
 ) else (
     python -m venv venv
     if errorlevel 1 (
-        echo  BŁĄD: Nie udało się utworzyć venv
+        echo  BLAD: Nie udalo sie utworzyc venv
         pause
         exit /b 1
     )
@@ -68,25 +68,29 @@ if exist "venv" (
 )
 
 :: =========================================================
-:: 3. Instalacja zależności
+:: 3. Instalacja zaleznosci
 :: =========================================================
 echo.
-echo [3/6] Instalacja zaleznosci (moze potrwac 1-2 min)...
+echo [3/6] Aktualizacja pip...
+venv\Scripts\python.exe -m pip install --upgrade pip --quiet --disable-pip-version-check 2>nul
+echo        pip zaktualizowany - OK
 
-call venv\Scripts\activate
-pip install -r requirements.txt --quiet --disable-pip-version-check 2>nul
+echo.
+echo [4/6] Instalacja zaleznosci (moze potrwac 1-2 min)...
+venv\Scripts\python.exe -m pip install -r requirements.txt --quiet --disable-pip-version-check 2>nul
 if errorlevel 1 (
-    echo  BŁĄD: Instalacja zależności nie powiodła się
+    echo  BLAD: Instalacja zaleznosci nie powiodla sie
+    echo  Sprawdz polaczenie z internetem i sprobuj ponownie.
     pause
     exit /b 1
 )
 echo        Wszystkie pakiety zainstalowane - OK
 
 :: =========================================================
-:: 4. Konfiguracja .env (API key)
+:: 4. Konfiguracja
 :: =========================================================
 echo.
-echo [4/6] Konfiguracja...
+echo [5/6] Konfiguracja...
 
 if not exist "csv_archives" (
     mkdir csv_archives
@@ -95,18 +99,19 @@ if not exist "csv_archives" (
 
 if not exist "voicebot.db" (
     echo.
-    echo  ┌──────────────────────────────────────────────────┐
-    echo  │  Pierwsza instalacja - konfiguracja API          │
-    echo  │                                                   │
-    echo  │  Klucz API ElevenLabs znajdziesz na:             │
-    echo  │  https://elevenlabs.io/app/settings/api-keys     │
-    echo  │                                                   │
-    echo  │  Agent ID znajdziesz w ustawieniach agenta       │
-    echo  │  w panelu ElevenLabs Conversational AI.          │
-    echo  └──────────────────────────────────────────────────┘
+    echo  ----------------------------------------------------------
+    echo   Pierwsza instalacja - konfiguracja API
     echo.
-    echo  Te dane mozesz rowniez podac pozniej w dashboardzie
-    echo  w zakladce Ustawienia.
+    echo   Klucz API ElevenLabs znajdziesz na:
+    echo   https://elevenlabs.io/app/settings/api-keys
+    echo.
+    echo   Agent ID znajdziesz w ustawieniach agenta
+    echo   w panelu ElevenLabs Conversational AI.
+    echo   Mozesz dodac do 10 agentow jednoczesnie.
+    echo.
+    echo   Te dane mozesz rowniez podac pozniej w dashboardzie
+    echo   w zakladce Ustawienia.
+    echo  ----------------------------------------------------------
     echo.
     echo        Baza danych zostanie utworzona przy pierwszym uruchomieniu - OK
 ) else (
@@ -114,10 +119,10 @@ if not exist "voicebot.db" (
 )
 
 :: =========================================================
-:: 5. Tworzenie skrótu na pulpicie
+:: 5. Tworzenie skrotu na pulpicie
 :: =========================================================
 echo.
-echo [5/6] Tworzenie skrotu na pulpicie...
+echo [6/6] Tworzenie skrotu na pulpicie...
 
 set SCRIPT_DIR=%~dp0
 set SCRIPT_DIR=%SCRIPT_DIR:~0,-1%
@@ -140,38 +145,38 @@ del "%TEMP%\_voicebot_shortcut.vbs" >nul 2>&1
 if exist "%USERPROFILE%\Desktop\Voicebot Dashboard.lnk" (
     echo        Skrot "Voicebot Dashboard" na pulpicie - OK
 ) else (
-    echo        Nie udalo sie utworzyc skrotu (mozesz uzyc start.bat recznie^)
+    echo        Nie udalo sie utworzyc skrotu (mozesz uzyc start.bat recznie)
 )
 
 :: =========================================================
-:: 6. Gotowe!
+:: 7. Weryfikacja
 :: =========================================================
 echo.
-echo [6/6] Weryfikacja instalacji...
+echo [OK] Weryfikacja instalacji...
 
-venv\Scripts\python.exe -c "import fastapi, uvicorn, sqlalchemy, httpx, apscheduler; print('        Wszystkie moduły dostępne - OK')"
+venv\Scripts\python.exe -c "import fastapi, uvicorn, sqlalchemy, httpx, apscheduler; print('        Wszystkie moduly dostepne - OK')"
 if errorlevel 1 (
-    echo  UWAGA: Niektore moduly mogą być niedostępne
+    echo  UWAGA: Niektore moduly moga byc niedostepne
+    echo  Sprobuj uruchomic: venv\Scripts\python.exe -m pip install -r requirements.txt
 )
 
 echo.
-echo  ╔══════════════════════════════════════════════════════╗
-echo  ║                                                      ║
-echo  ║   ✓ INSTALACJA ZAKOŃCZONA POMYŚLNIE!                ║
-echo  ║                                                      ║
-echo  ║   Uruchomienie:                                      ║
-echo  ║     • Kliknij "Voicebot Dashboard" na pulpicie      ║
-echo  ║     • lub uruchom start.bat                          ║
-echo  ║                                                      ║
-echo  ║   Dashboard otworzy się w przeglądarce:              ║
-echo  ║     http://localhost:8000                            ║
-echo  ║                                                      ║
-echo  ║   Przy pierwszym uruchomieniu podaj:                 ║
-echo  ║     • API Key ElevenLabs                             ║
-echo  ║     • Agent ID                                       ║
-echo  ║     w zakładce "Ustawienia" dashboardu.             ║
-echo  ║                                                      ║
-echo  ╚══════════════════════════════════════════════════════╝
+echo  ========================================================
+echo.
+echo   [OK] INSTALACJA ZAKONCZONA POMYSLNIE!
+echo.
+echo   Uruchomienie:
+echo     - Kliknij "Voicebot Dashboard" na pulpicie
+echo     - lub uruchom start.bat
+echo.
+echo   Dashboard otworzy sie w przegladarce:
+echo     http://localhost:8000
+echo.
+echo   Przy pierwszym uruchomieniu podaj w zakladce Ustawienia:
+echo     - API Key ElevenLabs
+echo     - Agentow (ID + nazwa) - do 10 agentow
+echo.
+echo  ========================================================
 echo.
 
 set /p RUNAPP="Czy uruchomic dashboard teraz? (T/n): "

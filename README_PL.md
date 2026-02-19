@@ -1,6 +1,6 @@
 # Voicebot Dashboard - Analityka ElevenLabs
 
-**Wersja 0.9** | Autor: Robert Malek
+**Wersja 1.0** | Autor: Robert Malek
 
 > [English documentation](README.md)
 
@@ -39,7 +39,7 @@ Instalator automatycznie:
 ### Krok 4: Skonfiguruj
 Przy pierwszym uruchomieniu w zakladce **"Ustawienia"** podaj:
 - **API Key ElevenLabs** — [pobierz tutaj](https://elevenlabs.io/app/settings/api-keys)
-- **Agent ID** — z ustawien agenta w panelu ElevenLabs
+- **Agenci** — dodaj do 10 agentow (Agent ID + nazwa wyswietlana) z panelu ElevenLabs
 
 ---
 
@@ -57,13 +57,14 @@ Przy pierwszym uruchomieniu w zakladce **"Ustawienia"** podaj:
 
 ## Funkcjonalnosci
 
+- **Multi-agent** — monitorowanie do 10 agentow ElevenLabs jednoczesnie z selektorem na dashboardzie
 - **Dashboard KPI w czasie rzeczywistym** z 12 kluczowymi wskaznikami
 - **Interaktywne wykresy** (Chart.js) - konwersja, trendy dzienne, czas rozmow, koszty
 - **Tabela konwersacji** z paginacja, numerami telefonow, ocenami, podsumowaniami
 - **Kryteria oceny** w tabeli — kolorowe wartosci 2/1/0 (sukces/unknown/failure) dla kazdego kryterium
 - **Kolumna zrodla** — kolorowe badge Twilio / SIP / Web dla identyfikacji kanalu
 - **Ekstrakcja numerow telefonow** - obsluga providerow Twilio i SIP Trunking
-- **Automatyczna codzienna synchronizacja** - scheduler pobiera dane przyrostowo od 1. dnia miesiaca
+- **Automatyczna codzienna synchronizacja** - scheduler pobiera dane dla wszystkich agentow
 - **Eksport CSV na zadanie** — eksport z osobnymi kolumnami kryteriow (0/1/2)
 - **Miesieczna archiwizacja CSV** - automatyczna archiwizacja w pierwszych 5 dniach kazdego miesiaca
 - **Lokalna baza SQLite** - wszystkie dane przechowywane lokalnie
@@ -91,7 +92,7 @@ Przy pierwszym uruchomieniu w zakladce **"Ustawienia"** podaj:
 - **Windows 10/11** (dla install.bat) lub Linux/macOS (recznie)
 - **Python 3.10+** — [pobierz](https://www.python.org/downloads/) (zaznacz "Add Python to PATH")
 - **Klucz API ElevenLabs** z dostepem do Conversational AI
-- **ID agenta ElevenLabs**
+- **ID agentow ElevenLabs** — do 10 agentow
 
 ## Instalacja reczna (Linux / macOS)
 
@@ -109,8 +110,9 @@ Otworz **http://localhost:8000** w przegladarce.
 
 1. Otworz dashboard w przegladarce
 2. Kliknij **"Ustawienia"** w prawym gornym rogu
-3. Wpisz swoj **klucz API ElevenLabs** i **Agent ID**
-4. Kliknij **"Zapisz"**
+3. Wpisz swoj **klucz API ElevenLabs**
+4. Dodaj **agentow** (Agent ID + nazwa wyswietlana) — do 10 agentow
+5. Kliknij **"Zapisz"**
 
 Klucz API jest przechowywany wylacznie w lokalnej bazie SQLite. Nie jest nigdzie wysylany poza API ElevenLabs.
 
@@ -164,19 +166,20 @@ voicebot-dashboard/
 | Metoda | Endpoint | Opis |
 |--------|----------|------|
 | GET | `/` | Strona dashboardu |
-| GET | `/api/settings` | Pobierz ustawienia (zamaskowany klucz API) |
-| POST | `/api/settings` | Zapisz klucz API i Agent ID |
-| POST | `/api/sync` | Uruchom reczna synchronizacje |
-| GET | `/api/kpis?month=YYYY-MM` | Pobierz obliczone KPI |
-| GET | `/api/conversations?month=&page=&per_page=` | Lista konwersacji z kryteriami |
-| GET | `/api/months` | Dostepne partycje miesieczne |
-| GET | `/api/export-csv?month=` | Eksport konwersacji do CSV (z kolumnami kryteriow) |
-| POST | `/api/archive?month=YYYY-MM` | Archiwizuj miesiac do CSV |
+| GET | `/api/settings` | Pobierz ustawienia (zamaskowany klucz API, lista agentow) |
+| POST | `/api/settings` | Zapisz klucz API i agentow (do 10) |
+| GET | `/api/agents` | Lista skonfigurowanych agentow |
+| POST | `/api/sync` | Uruchom synchronizacje (wszystkich lub jednego agenta) |
+| GET | `/api/kpis?agent_id=&month=` | Pobierz KPI dla agenta |
+| GET | `/api/conversations?agent_id=&month=&page=` | Lista konwersacji dla agenta |
+| GET | `/api/months?agent_id=` | Dostepne miesiace dla agenta |
+| GET | `/api/export-csv?agent_id=&month=` | Eksport konwersacji do CSV |
+| POST | `/api/archive?agent_id=&month=` | Archiwizuj miesiac do CSV |
 | GET | `/api/archives` | Lista istniejacych archiwow |
 | GET | `/api/download-csv/{id}` | Pobierz zarchiwizowany CSV |
-| POST | `/api/refetch-details` | Ponownie pobierz szczegoly konwersacji |
-| GET | `/api/sync-logs` | Historia synchronizacji |
-| GET | `/api/debug-metadata` | Diagnostyka surowych metadanych JSON |
+| POST | `/api/refetch-details?agent_id=` | Ponownie pobierz szczegoly konwersacji |
+| GET | `/api/sync-logs` | Historia synchronizacji (wszystkich agentow) |
+| GET | `/api/debug-metadata?agent_id=` | Diagnostyka surowych metadanych JSON |
 
 ## Bezpieczenstwo
 
@@ -196,6 +199,7 @@ voicebot-dashboard/
 
 | Wersja | Data | Zmiany |
 |--------|------|--------|
+| 1.0 | 2026-02 | Multi-agent (do 10 agentow), selektor agenta na dashboardzie, KPI per agent |
 | 0.9 | 2026-02 | Profesjonalny instalator one-click, start/stop/uninstall, skrot na pulpicie |
 | 0.8.2 | 2026-02 | Kryteria oceny w tabeli i CSV (2/1/0), kolumna zrodla (Twilio/SIP/Web) |
 | 0.8.1 | 2026-02 | Diagnostyka metadanych, ulepszona ekstrakcja numerow telefonow |
