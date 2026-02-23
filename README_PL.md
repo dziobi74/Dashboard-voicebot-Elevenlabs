@@ -15,6 +15,16 @@ Samodzielnie hostowany dashboard webowy do monitorowania i analizy wydajnosci vo
 
 ## Szybka instalacja (Windows)
 
+### Krok 0: Zainstaluj Python (wymagane)
+Jesli nie masz jeszcze Pythona:
+1. Wejdz na **https://www.python.org/downloads/**
+2. Pobierz Python **3.10 lub nowszy** (zalecany: najnowszy 3.12 lub 3.13)
+3. Uruchom instalator — **WAZNE: zaznacz "Add Python to PATH"** na dole okna instalatora!
+4. Kliknij "Install Now"
+5. Sprawdz: otworz **CMD** (Wiersz polecen) i wpisz: `python --version` — powinno pokazac `Python 3.1x.x`
+
+> Jesli `python --version` pokazuje blad lub "nie rozpoznano polecenia", Python nie jest w PATH. Przeinstaluj z zaznaczonym "Add Python to PATH".
+
 ### Krok 1: Pobierz
 ```
 git clone https://github.com/dziobi74/Dashboard-voicebot-Elevenlabs.git

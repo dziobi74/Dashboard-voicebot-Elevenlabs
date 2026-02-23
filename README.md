@@ -15,6 +15,16 @@ A self-hosted web dashboard for monitoring and analyzing ElevenLabs Conversation
 
 ## Quick Install (Windows)
 
+### Step 0: Install Python (required)
+If you don't have Python installed yet:
+1. Go to **https://www.python.org/downloads/**
+2. Download Python **3.10 or newer** (recommended: latest 3.12 or 3.13)
+3. Run the installer — **IMPORTANT: check "Add Python to PATH"** at the bottom of the installer window!
+4. Click "Install Now"
+5. Verify: open **CMD** (Command Prompt) and type: `python --version` — should show `Python 3.1x.x`
+
+> If `python --version` shows an error or "not recognized", Python is not in PATH. Reinstall with "Add Python to PATH" checked.
+
 ### Step 1: Download
 ```
 git clone https://github.com/dziobi74/Dashboard-voicebot-Elevenlabs.git
